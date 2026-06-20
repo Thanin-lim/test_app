@@ -1,34 +1,87 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import date, datetime
+from datetime import date
 from streamlit_gsheets import GSheetsConnection
 import hashlib
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(page_title="Wedding Planner Dashboard", page_icon="💍", layout="wide")
 
+# --- 💅 CUSTOM CSS (UI/UX UPGRADE) ---
+st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
+        
+        html, body, [class*="css"] {
+            font-family: 'Kanit', sans-serif;
+        }
+        
+        /* ตกแต่งปุ่มกด */
+        div.stButton > button {
+            border-radius: 20px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border: 1px solid #fbcfe8;
+        }
+        div.stButton > button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(219, 39, 119, 0.15);
+            border-color: #f472b6;
+        }
+        
+        /* ตกแต่ง Metric Cards (กล่องตัวเลข) */
+        div[data-testid="metric-container"] {
+            background-color: #ffffff;
+            border: 1px solid #fce7f3;
+            padding: 15px 20px;
+            border-radius: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            transition: transform 0.2s ease;
+        }
+        div[data-testid="metric-container"]:hover {
+            transform: scale(1.02);
+        }
+        
+        /* หัวข้อ */
+        h1, h2, h3 {
+            color: #db2777;
+        }
+        
+        /* กรอบแบบฟอร์ม */
+        div[data-testid="stForm"] {
+            background-color: #fffafc;
+            border-radius: 16px;
+            border: 1px solid #fbcfe8;
+            padding: 20px;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 # --- 2. AUTHENTICATION (SECURITY) ---
-APP_PASSWORD_HASH = hashlib.sha256("imukko".encode('utf-8')).hexdigest()
+APP_PASSWORD_HASH = hashlib.sha256("mooko".encode('utf-8')).hexdigest()
 
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
     st.markdown("<br><br><br>", unsafe_allow_html=True)
-    st.markdown("<h1 style='text-align: center; color: #db2777;'>💍 Wedding Planner Dashboard</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #db2777; font-size: 3em;'>💍 Wedding Planner</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #6b7280;'>Welcome to your magical journey</p>", unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns([1, 1, 1])
+    col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
-        st.info("กรุณาใส่รหัสผ่านเพื่อเข้าสู่ระบบจัดการงานแต่งงาน")
-        pwd = st.text_input("Password:", type="password")
-        if st.button("เข้าสู่ระบบ", type="primary", use_container_width=True):
+        st.markdown("<div style='background-color: white; padding: 30px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #fce7f3;'>", unsafe_allow_html=True)
+        pwd = st.text_input("🔑 รหัสผ่านเข้าสู่ระบบ:", type="password", placeholder="Enter your password...")
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("เข้าสู่ระบบ 🤍", type="primary", use_container_width=True):
             pwd_hash = hashlib.sha256(pwd.encode('utf-8')).hexdigest()
             if pwd_hash == APP_PASSWORD_HASH:
                 st.session_state.authenticated = True
                 st.rerun()
             else:
-                st.error("❌ รหัสผ่านไม่ถูกต้อง")
+                st.error("❌ รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่")
+        st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
 # --- 3. GOOGLE SHEETS CONNECTION & DATA PIPELINE ---
@@ -39,16 +92,14 @@ def load_budget():
         df = conn.read(worksheet="Budget", usecols=[0], ttl=10)
         if not df.empty and pd.notna(df.iloc[0, 0]):
             return float(df.iloc[0, 0])
-    except Exception as e:
-        st.warning(f"⚠️ ไม่สามารถโหลดข้อมูลงบประมาณได้: {e}")
+    except Exception: pass
     return 190000.00 
 
 def save_budget(amount):
     try:
         df = pd.DataFrame({"Total Budget": [amount]})
         conn.update(worksheet="Budget", data=df)
-    except Exception as e:
-        st.error(f"❌ บันทึกงบประมาณล้มเหลว: {e}")
+    except Exception as e: st.error(f"❌ บันทึกงบประมาณล้มเหลว: {e}")
 
 def load_expenses():
     try:
@@ -57,20 +108,15 @@ def load_expenses():
             df = df.dropna(how="all")
             if 'Status' not in df.columns: df['Status'] = 'ยังไม่ชำระเงิน'
             if 'Contact' not in df.columns: df['Contact'] = '' 
-            if 'Amount' in df.columns:
-                df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0.0)
-            else:
-                df['Amount'] = 0.0
+            if 'Amount' in df.columns: df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0.0)
+            else: df['Amount'] = 0.0
             return df
-    except Exception as e:
-        pass
+    except Exception: pass
     return pd.DataFrame(columns=['Vendor', 'Category', 'Amount', 'Due Date', 'Status', 'Contact'])
 
 def save_expenses(df):
-    try:
-        conn.update(worksheet="Expenses", data=df)
-    except Exception as e:
-        st.error(f"❌ บันทึกค่าใช้จ่ายล้มเหลว: {e}")
+    try: conn.update(worksheet="Expenses", data=df)
+    except Exception as e: st.error(f"❌ บันทึกล้มเหลว: {e}")
 
 def load_todos():
     try:
@@ -81,20 +127,15 @@ def load_todos():
             if not df.empty and 'Deadline' in df.columns:
                 df['Deadline'] = pd.to_datetime(df['Deadline']).dt.date 
                 return df
-    except Exception as e:
-        pass
+    except Exception: pass
     return pd.DataFrame({
-        'Status': ['ยังไม่ได้เริ่ม', 'ยังไม่ได้เริ่ม'],
-        'Task': ['จองสถานที่จัดงาน', 'ลิสต์รายชื่อแขก'],
-        'Deadline': [date(2026, 11, 24), date(2026, 12, 1)],
-        'Detail': ['โรงแรม หรือ สวนในเมือง', 'รวมญาติฝั่งเจ้าสาวและเจ้าบ่าว']
+        'Status': ['ยังไม่ได้เริ่ม', 'ยังไม่ได้เริ่ม'], 'Task': ['จองสถานที่จัดงาน', 'ลิสต์รายชื่อแขก'],
+        'Deadline': [date(2026, 11, 24), date(2026, 12, 1)], 'Detail': ['โรงแรม หรือ สวนในเมือง', 'รวมญาติฝั่งเจ้าสาวและเจ้าบ่าว']
     })
 
 def save_todos(df):
-    try:
-        conn.update(worksheet="Todos", data=df)
-    except Exception as e:
-        st.error(f"❌ บันทึก To-Do ล้มเหลว: {e}")
+    try: conn.update(worksheet="Todos", data=df)
+    except Exception as e: st.error(f"❌ บันทึก To-Do ล้มเหลว: {e}")
 
 def load_guests():
     try:
@@ -102,19 +143,15 @@ def load_guests():
         if not df.empty:
             df = df.dropna(subset=['Guest Name'])
             if 'RSVP' not in df.columns: df['RSVP'] = 'รอการตอบรับ'
-            if 'Table' not in df.columns: df['Table'] = '-' # ฟิลด์ใหม่สำหรับจัดโต๊ะ
-            for col in df.columns:
-                df[col] = df[col].astype(str).replace(['nan', 'None', '<NA>'], '')
+            if 'Table' not in df.columns: df['Table'] = '-' 
+            for col in df.columns: df[col] = df[col].astype(str).replace(['nan', 'None', '<NA>'], '')
             return df
-    except Exception as e:
-        pass
+    except Exception: pass
     return pd.DataFrame(columns=['Guest Name', 'Side', 'Group', 'Note', 'RSVP', 'Table'])
 
 def save_guests(df):
-    try:
-        conn.update(worksheet="Guests", data=df)
-    except Exception as e:
-        st.error(f"❌ บันทึกรายชื่อแขกล้มเหลว: {e}")
+    try: conn.update(worksheet="Guests", data=df)
+    except Exception as e: st.error(f"❌ บันทึกล้มเหลว: {e}")
 
 def load_itinerary():
     try:
@@ -124,23 +161,19 @@ def load_itinerary():
             for col in ['Time', 'Activity', 'Location', 'PIC', 'Note']:
                 if col not in df.columns: df[col] = ''
             return df
-    except Exception as e:
-        pass
+    except Exception: pass
     return pd.DataFrame(columns=['Time', 'Activity', 'Location', 'PIC', 'Note'])
 
 def save_itinerary(df):
-    try:
-        conn.update(worksheet="Itinerary", data=df)
-    except Exception as e:
-        st.error(f"❌ บันทึกตารางรันคิวล้มเหลว: {e}")
+    try: conn.update(worksheet="Itinerary", data=df)
+    except Exception as e: st.error(f"❌ บันทึกล้มเหลว: {e}")
 
 def get_thai_month_year(date_val):
     try:
         d = pd.to_datetime(date_val)
         thai_months = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
         return f"{thai_months[d.month - 1]} {d.year}"
-    except:
-        return "ไม่ระบุ"
+    except: return "ไม่ระบุ"
 
 # --- 4. INITIALIZE SESSION STATE ---
 if 'expenses' not in st.session_state: st.session_state.expenses = load_expenses()
@@ -210,21 +243,19 @@ def on_itinerary_edit():
 # ==========================================
 if st.session_state.page == "🏠 หน้าแรก (Dashboard)":
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<h1 style='text-align: center; color: #db2777;'>💍 Wedding Planner Dashboard</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #db2777;'>✨ Wedding Planner Dashboard ✨</h1>", unsafe_allow_html=True)
     
-    # 📌 คำนวณ Metrics สำหรับ Dashboard
     total_spent = st.session_state.expenses['Amount'].sum() if not st.session_state.expenses.empty else 0.0
     budget_pct = min((total_spent / st.session_state.total_budget) * 100, 100) if st.session_state.total_budget > 0 else 0
-    
     total_todos = len(st.session_state.todos)
     done_todos = len(st.session_state.todos[st.session_state.todos['Status'] == 'เสร็จแล้ว']) if total_todos > 0 else 0
     todo_pct = (done_todos / total_todos) * 100 if total_todos > 0 else 0
-    
     total_guests = len(st.session_state.guests)
     rsvp_done = len(st.session_state.guests[st.session_state.guests['RSVP'] == 'ยืนยันเข้าร่วม']) if total_guests > 0 else 0
     guest_pct = (rsvp_done / total_guests) * 100 if total_guests > 0 else 0
 
-    st.markdown("### 📈 สรุปภาพรวมการเตรียมงาน (Overall Progress)")
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### 📈 สรุปภาพรวมการเตรียมงาน")
     dash1, dash2, dash3 = st.columns(3)
     with dash1:
         st.markdown(f"**💰 งบประมาณที่ใช้ไป ({budget_pct:.1f}%)**")
@@ -239,8 +270,8 @@ if st.session_state.page == "🏠 หน้าแรก (Dashboard)":
         st.progress(int(guest_pct))
         st.caption(f"ตอบรับ: {rsvp_done} / {total_guests} ท่าน")
 
-    st.markdown("<br><hr>", unsafe_allow_html=True)
-    st.markdown("### 🗂️ เลือกหมวดหมู่การทำงาน")
+    st.markdown("<br><hr style='border: 1px solid #fce7f3;'><br>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center;'>🗂️ เลือกหมวดหมู่การทำงาน</h3><br>", unsafe_allow_html=True)
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -257,13 +288,13 @@ if st.session_state.page == "🏠 หน้าแรก (Dashboard)":
 # ==========================================
 elif st.session_state.page == "📊 Budget Tracker":
     if st.button("⬅️ กลับหน้าหลัก", type="secondary"): st.session_state.page = "🏠 หน้าแรก (Dashboard)"; st.rerun()
-    st.title("💍 Wedding Budget Dashboard")
+    st.title("💰 Wedding Budget Dashboard")
     st.markdown("---")
 
-    set_col, add_col = st.columns(2)
+    set_col, add_col = st.columns([1, 2.5])
     with set_col:
         st.markdown("### ⚙️ ตั้งค่างบประมาณ")
-        new_budget = st.number_input("ตั้งงบประมาณทั้งหมด (บาท):", min_value=0.0, value=st.session_state.total_budget, step=1000.0)
+        new_budget = st.number_input("ตั้งงบประมาณ (บาท):", min_value=0.0, value=st.session_state.total_budget, step=1000.0)
         if new_budget != st.session_state.total_budget:
             st.session_state.total_budget = new_budget
             save_budget(new_budget)
@@ -280,15 +311,15 @@ elif st.session_state.page == "📊 Budget Tracker":
             v_col5, v_col6 = st.columns(2)
             contact_info = v_col5.text_input("ช่องทางติดต่อ (เบอร์/Line)")
             payment_status = v_col6.selectbox("สถานะการจ่ายเงิน", ["ยังไม่ชำระเงิน", "ชำระเงินแล้ว"])
-            submit_button = st.form_submit_button("💾 เพิ่มลงในบัญชี")
             
+            submit_button = st.form_submit_button("💾 เพิ่มลงในบัญชี")
             if submit_button and vendor and amount > 0:
                 new_row = pd.DataFrame([{'Vendor': vendor, 'Category': category, 'Amount': float(amount), 'Due Date': due_date.strftime("%d %B %Y"), 'Status': payment_status, 'Contact': contact_info}])
                 st.session_state.expenses = pd.concat([st.session_state.expenses, new_row], ignore_index=True)
                 save_expenses(st.session_state.expenses)
                 st.success("เพิ่มสำเร็จ!"); st.rerun()
 
-    st.markdown("---")
+    st.markdown("<br>", unsafe_allow_html=True)
     if not st.session_state.expenses.empty:
         def highlight_payment_status(val):
             return 'background-color: #dcfce7; color: #166534;' if val == 'ชำระเงินแล้ว' else 'background-color: #fee2e2; color: #991b1b;'
@@ -313,13 +344,14 @@ elif st.session_state.page == "📝 สิ่งที่ต้องทำ (To-
             save_todos(st.session_state.todos) 
             st.rerun()
 
-    st.markdown("---")
+    st.markdown("<br>", unsafe_allow_html=True)
     if not st.session_state.todos.empty:
         st.data_editor(
             st.session_state.todos,
             column_config={"Status": st.column_config.SelectboxColumn("📌 สถานะ", options=["ยังไม่ได้เริ่ม", "อยู่ระหว่างดำเนินการ", "หยุดไว้ชั่วคราว", "ไม่จำเป็น", "เสร็จแล้ว"])},
             hide_index=False, width='stretch', key="todo_editor", on_change=on_todos_edit
         )
+
 # ==========================================
 # PAGE 3: GUEST LIST & SEATING 
 # ==========================================
@@ -327,18 +359,17 @@ elif st.session_state.page == "👥 รายชื่อแขก (Guest List)"
     if st.button("⬅️ กลับหน้าหลัก", type="secondary"): st.session_state.page = "🏠 หน้าแรก (Dashboard)"; st.rerun()
     st.title("👥 จัดการรายชื่อแขกและผังที่นั่ง")
 
-    # --- คำนวณสรุปจำนวนแขกปัจจุบัน ---
     total_guests = len(st.session_state.guests)
     rsvp_confirmed = len(st.session_state.guests[st.session_state.guests['RSVP'] == 'ยืนยันเข้าร่วม']) if total_guests > 0 else 0
     rsvp_pending = len(st.session_state.guests[st.session_state.guests['RSVP'] == 'รอการตอบรับ']) if total_guests > 0 else 0
     rsvp_declined = len(st.session_state.guests[st.session_state.guests['RSVP'] == 'ไม่สามารถเข้าร่วมได้']) if total_guests > 0 else 0
 
-    st.markdown("### 📊 สรุปจำนวนแขกปัจจุบัน")
+    st.markdown("### 📊 สรุปจำนวนแขก")
     g1, g2, g3, g4 = st.columns(4)
-    g1.metric("จำนวนแขกในลิสต์ทั้งหมด", f"{total_guests} คน")
-    g2.metric("✅ ยืนยันเข้าร่วมแล้ว", f"{rsvp_confirmed} คน")
+    g1.metric("จำนวนแขกในลิสต์", f"{total_guests} คน")
+    g2.metric("✅ ยืนยันเข้าร่วม", f"{rsvp_confirmed} คน")
     g3.metric("⏳ รอการตอบรับ", f"{rsvp_pending} คน")
-    g4.metric("❌ ไม่สามารถเข้าร่วมได้", f"{rsvp_declined} คน")
+    g4.metric("❌ ไม่ร่วมงาน", f"{rsvp_declined} คน")
 
     st.markdown("---")
 
@@ -360,7 +391,7 @@ elif st.session_state.page == "👥 รายชื่อแขก (Guest List)"
                 st.session_state.guests = pd.concat([st.session_state.guests, new_guest], ignore_index=True)
                 save_guests(st.session_state.guests); st.rerun()
         
-        st.markdown("---")
+        st.markdown("<br>", unsafe_allow_html=True)
         if not st.session_state.guests.empty:
             st.data_editor(
                 st.session_state.guests,
@@ -376,8 +407,7 @@ elif st.session_state.page == "👥 รายชื่อแขก (Guest List)"
         if not st.session_state.guests.empty:
             confirmed_guests = st.session_state.guests[st.session_state.guests['RSVP'] == 'ยืนยันเข้าร่วม']
             if not confirmed_guests.empty:
-                st.info("จัดกลุ่มแขกด้วยการพิมพ์ชื่อโต๊ะลงในคอลัมน์ Table ")
-                # กรองเฉพาะ Column ที่จำเป็นสำหรับการจัดโต๊ะ
+                st.info("💡 ทริค: จัดกลุ่มแขกด้วยการพิมพ์ชื่อโต๊ะลงในคอลัมน์ Table เช่น 'VIP-1', 'Friend-A'")
                 seat_df = confirmed_guests[['Guest Name', 'Group', 'Side', 'Table', 'Note']]
                 st.dataframe(seat_df, width=1000)
                 
@@ -387,14 +417,13 @@ elif st.session_state.page == "👥 รายชื่อแขก (Guest List)"
                 st.table(table_summary)
             else:
                 st.warning("ยังไม่มีแขกที่ยืนยันเข้าร่วมงาน (RSVP = ยืนยันเข้าร่วม)")
-        else:
-            st.info("ยังไม่มีข้อมูลในระบบ")
+
 # ==========================================
 # PAGE 4: ITINERARY (ตารางรันคิว)
 # ==========================================
 elif st.session_state.page == "⏱️ ตารางรันคิว (Itinerary)":
     if st.button("⬅️ กลับหน้าหลัก", type="secondary"): st.session_state.page = "🏠 หน้าแรก (Dashboard)"; st.rerun()
-    st.title("⏱️ ตารางรันคิววันงาน (Wedding Day Itinerary)")
+    st.title("⏱️ ตารางรันคิววันงาน")
     st.markdown("จัดเรียงลำดับพิธีการ สถานที่ และผู้รับผิดชอบ เพื่อให้ทุกฝ่ายทำงานตรงกัน")
     st.markdown("---")
 
@@ -414,6 +443,6 @@ elif st.session_state.page == "⏱️ ตารางรันคิว (Itinera
             save_itinerary(st.session_state.itinerary)
             st.rerun()
 
-    st.markdown("---")
+    st.markdown("<br>", unsafe_allow_html=True)
     if not st.session_state.itinerary.empty:
         st.data_editor(st.session_state.itinerary, width='stretch', key="itin_editor", on_change=on_itinerary_edit)
