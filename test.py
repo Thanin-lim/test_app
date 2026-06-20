@@ -103,7 +103,7 @@ if 'todos' not in st.session_state:
 if 'guests' not in st.session_state:
     st.session_state.guests = load_guests()
 
-# สร้าง State สำหรับเก็บหน้าปัจจุบัน (เริ่มต้นที่หน้าแรก)
+# เริ่มต้นแอปที่หน้าหลักเสมอ
 if 'page' not in st.session_state:
     st.session_state.page = "🏠 หน้าแรก"
 
@@ -166,7 +166,7 @@ def on_guests_edit():
 
 
 # ==========================================
-# 🏠 หน้าแรก: เมนูเลือกหมวดหมู่หลัก (ไม่มี NAV ด้านข้าง)
+# 🏠 หน้าแรก: เลือกหมวดหมู่ (ไม่มี NAV BAR)
 # ==========================================
 if st.session_state.page == "🏠 หน้าแรก":
     st.markdown("<br>", unsafe_allow_html=True)
@@ -211,7 +211,7 @@ if st.session_state.page == "🏠 หน้าแรก":
 
 
 # ==========================================
-# PAGE 1: BUDGET TRACKER
+# PAGE 1: BUDGET TRACKER (ไม่มี NAV BAR)
 # ==========================================
 elif st.session_state.page == "📊 Budget Tracker":
     if st.button("⬅️ กลับหน้าหลัก (เมนูเลือกหมวดหมู่)", type="secondary"):
@@ -219,31 +219,42 @@ elif st.session_state.page == "📊 Budget Tracker":
         st.rerun()
         
     st.title("💍 Wedding Budget Dashboard")
-    
-    st.sidebar.header("⚙️ ตั้งค่างบประมาณ")
-    new_budget = st.sidebar.number_input("Set Total Budget (THB):", min_value=0.0, value=st.session_state.total_budget, step=1000.0)
-    
-    if new_budget != st.session_state.total_budget:
-        st.session_state.total_budget = new_budget
-        save_budget(new_budget)
+    st.markdown("---")
 
-    st.sidebar.subheader("➕ เพิ่มค่าใช้จ่าย")
-    with st.sidebar.form("add_expense_form", clear_on_submit=True):
-        vendor = st.text_input("ชื่อร้านค้า/บริการ (Vendor)")
-        category = st.selectbox("หมวดหมู่", ["Venue (สถานที่จัดงานแต่ง)", "Food & Beverage (อาหารและเครื่องดื่ม)", "Attire (ชุดในงานแต่งงาน)", "Photography & Video (ช่างภาพ/วิดีโอ)", "Entertainment (ความบันเทิง)", "Other (อื่นๆ)"])
-        amount = st.number_input("จำนวนเงิน (THB)", min_value=0.0, step=1000.0)
-        due_date = st.date_input("กำหนดชำระเงิน", min_value=date.today())
-        payment_status = st.selectbox("สถานะ", ["ยังไม่ชำระเงิน", "ชำระเงินแล้ว"])
-        
-        submit_button = st.form_submit_button("เพิ่มลงในบัญชี")
-        
-        if submit_button and vendor and amount > 0:
-            new_row = pd.DataFrame([{'Vendor': vendor, 'Category': category, 'Amount': float(amount), 'Due Date': due_date.strftime("%d %B %Y"), 'Status': payment_status}])
-            st.session_state.expenses = pd.concat([st.session_state.expenses, new_row], ignore_index=True)
-            save_expenses(st.session_state.expenses)
-            st.success("เพิ่มค่าใช้จ่ายเรียบร้อยแล้ว!")
-            st.rerun()
+    # ย้ายแบบฟอร์มการตั้งค่าและเพิ่มค่าใช้จ่ายเข้าหน้าหลักโดยใช้คอลัมน์แทน Sidebar
+    set_col, add_col = st.columns(2)
+    
+    with set_col:
+        st.markdown("### ⚙️ ตั้งค่างบประมาณ")
+        new_budget = st.number_input("ตั้งงบประมาณทั้งหมด (บาท):", min_value=0.0, value=st.session_state.total_budget, step=1000.0)
+        if new_budget != st.session_state.total_budget:
+            st.session_state.total_budget = new_budget
+            save_budget(new_budget)
+            
+    with add_col:
+        st.markdown("### ➕ เพิ่มค่าใช้จ่ายใหม่")
+        with st.form("add_expense_form_main", clear_on_submit=True):
+            v_col1, v_col2 = st.columns(2)
+            vendor = v_col1.text_input("ชื่อร้านค้า/บริการ (Vendor)", placeholder="เช่น โรงแรม, ช่างภาพ...")
+            category = v_col2.selectbox("หมวดหมู่", ["Venue (สถานที่จัดงานแต่ง)", "Food & Beverage (อาหารและเครื่องดื่ม)", "Attire (ชุดในงานแต่งงาน)", "Photography & Video (ช่างภาพ/วิดีโอ)", "Entertainment (ความบันเทิง)", "Other (อื่นๆ)"])
+            
+            v_col3, v_col4 = st.columns(2)
+            amount = v_col3.number_input("จำนวนเงิน (บาท)", min_value=0.0, step=1000.0)
+            due_date = v_col4.date_input("กำหนดชำระเงิน", min_value=date.today())
+            
+            payment_status = st.selectbox("สถานะการจ่ายเงิน", ["ยังไม่ชำระเงิน", "ชำระเงินแล้ว"])
+            submit_button = st.form_submit_button("💾 เพิ่มลงในบัญชี")
+            
+            if submit_button and vendor and amount > 0:
+                new_row = pd.DataFrame([{'Vendor': vendor, 'Category': category, 'Amount': float(amount), 'Due Date': due_date.strftime("%d %B %Y"), 'Status': payment_status}])
+                st.session_state.expenses = pd.concat([st.session_state.expenses, new_row], ignore_index=True)
+                save_expenses(st.session_state.expenses)
+                st.success("เพิ่มค่าใช้จ่ายเรียบร้อยแล้ว!")
+                st.rerun()
 
+    st.markdown("---")
+    
+    # คำนวณสรุปเงินยอดต่าง ๆ
     total_spent = st.session_state.expenses['Amount'].sum() if not st.session_state.expenses.empty else 0.0
     remaining_budget = st.session_state.total_budget - total_spent
 
@@ -274,7 +285,7 @@ elif st.session_state.page == "📊 Budget Tracker":
             fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5))
             st.plotly_chart(fig, width='stretch')
         else:
-            st.info("เพิ่มค่าใช้จ่ายที่แถบด้านข้างเพื่อดูแผนภูมิ")
+            st.info("กรุณาเพิ่มค่าใช้จ่ายด้านบนก่อนเพื่อดูแผนภูมิ")
 
     with tab_table:
         if not st.session_state.expenses.empty:
@@ -295,8 +306,9 @@ elif st.session_state.page == "📊 Budget Tracker":
                 hide_index=False, width='stretch', num_rows="dynamic", key="expense_editor", on_change=on_expenses_edit
             )
 
+
 # ==========================================
-# PAGE 2: TO-DO LIST
+# PAGE 2: TO-DO LIST (ไม่มี NAV BAR)
 # ==========================================
 elif st.session_state.page == "📝 สิ่งที่ต้องทำ (To-Do)":
     if st.button("⬅️ กลับหน้าหลัก (เมนูเลือกหมวดหมู่)", type="secondary"):
@@ -304,6 +316,24 @@ elif st.session_state.page == "📝 สิ่งที่ต้องทำ (To-
         st.rerun()
         
     st.title("📝 เตรียมสิ่งที่ต้องทำ (To-Do List)")
+    st.markdown("---")
+
+    # ย้ายฟอร์มการเพิ่มงานที่ต้องทำขึ้นมาอยู่ด้านบนของหน้านี้
+    st.markdown("### ➕ เพิ่มงานที่ต้องทำใหม่")
+    with st.form("add_task_form_main", clear_on_submit=True):
+        t_col1, t_col2 = st.columns([2, 1])
+        task_name = t_col1.text_input("ชื่องานที่ต้องเตรียม", placeholder="เช่น เตรียมของชำร่วย, มัดจำชุดแต่งงาน...")
+        task_deadline = t_col2.date_input("กำหนดการเสร็จสิ้น", min_value=date.today())
+        task_detail = st.text_area("รายละเอียด/สถานที่/โน้ตเพิ่มเติม", placeholder="ระบุรายละเอียดงานช่วยจำตรงนี้...")
+        add_task_btn = st.form_submit_button("💾 เพิ่มงาน")
+        
+        if add_task_btn and task_name:
+            new_task = pd.DataFrame([{'Status': 'ยังไม่ได้เริ่ม', 'Task': task_name, 'Deadline': task_deadline, 'Detail': task_detail}])
+            st.session_state.todos = pd.concat([st.session_state.todos, new_task], ignore_index=True)
+            save_todos(st.session_state.todos) 
+            st.rerun()
+
+    st.markdown("---")
     
     if not st.session_state.todos.empty:
         status_counts = st.session_state.todos['Status'].value_counts().reset_index()
@@ -316,25 +346,12 @@ elif st.session_state.page == "📝 สิ่งที่ต้องทำ (To-
         fig_todo.update_layout(margin=dict(t=10, b=10, l=10, r=10), legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5)) 
         st.plotly_chart(fig_todo, width='stretch')
         st.markdown("---")
-    
-    st.sidebar.header("➕ เพิ่มงานที่ต้องทำ")
-    with st.sidebar.form("add_task_form", clear_on_submit=True):
-        task_name = st.text_input("ชื่องาน (เช่น เตรียมของชำร่วย)")
-        task_deadline = st.date_input("กำหนดการเสร็จสิ้น", min_value=date.today())
-        task_detail = st.text_area("รายละเอียด/สถานที่/โน้ตเพิ่มเติม")
-        add_task_btn = st.form_submit_button("เพิ่มงาน")
-        
-        if add_task_btn and task_name:
-            new_task = pd.DataFrame([{'Status': 'ยังไม่ได้เริ่ม', 'Task': task_name, 'Deadline': task_deadline, 'Detail': task_detail}])
-            st.session_state.todos = pd.concat([st.session_state.todos, new_task], ignore_index=True)
-            save_todos(st.session_state.todos) 
-            st.rerun()
 
     tab_edit, tab_view = st.tabs(["✏️ อัปเดตสถานะและรายละเอียด", "📌 ภาพรวมรายเดือน"])
+    
     with tab_edit:
         if not st.session_state.todos.empty:
-            st.markdown(f"**📋 รายการสิ่งที่ต้องทำในตาราง (มีทั้งหมด {len(st.session_state.todos)} รายการ):**")
-            
+            st.markdown(f"**📋 รายการสิ่งที่ต้องทำในตาราง (กดปุ่มถังขยะเพื่อลบ หรือเปลี่ยนสถานะได้ทันที):**")
             def highlight_status(val):
                 colors = {
                     'ยังไม่ได้เริ่ม': '#f3f4f6', 
@@ -395,8 +412,9 @@ elif st.session_state.page == "📝 สิ่งที่ต้องทำ (To-
                         detail_text = task_info['Detail'] if pd.notna(task_info['Detail']) and task_info['Detail'] != "" else "ไม่มีการระบุรายละเอียด"
                         st.info(f"**📋 ชื่องาน:** {task_info['Task']} \n\n**📅 วันครบกำหนด:** {task_info['Deadline'].strftime('%d/%m/%Y') if hasattr(task_info['Deadline'], 'strftime') else task_info['Deadline']} \n\n**📌 สถานะปัจจุบัน:** {task_info['Status']} \n\n**🏠 รายละเอียด/Note สำคัญ:** {detail_text}")
 
+
 # ==========================================
-# PAGE 3: GUEST LIST (ระบบจัดการรายชื่อแขก)
+# PAGE 3: GUEST LIST (ระบบจัดการรายชื่อแขก - ไม่มี NAV BAR)
 # ==========================================
 elif st.session_state.page == "👥 รายชื่อแขก (Guest List)":
     if st.button("⬅️ กลับหน้าหลัก (เมนูเลือกหมวดหมู่)", type="secondary"):
