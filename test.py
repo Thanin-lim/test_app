@@ -69,6 +69,9 @@ def load_guests():
         df = conn.read(worksheet="Guests", ttl=0)
         if not df.empty:
             df = df.dropna(subset=['Guest Name'])
+            # บังคับให้ทุกคอลัมน์ในตารางแขกเป็นประเภทตัวหนังสือ เพื่อป้องกันค่าว่างในชีตเอ๋อเป็น FLOAT
+            for col in df.columns:
+                df[col] = df[col].astype(str).replace(['nan', 'None', '<NA>'], '')
             return df
     except:
         pass
@@ -197,7 +200,7 @@ if page == "📊 Budget Tracker":
     remaining_budget = st.session_state.total_budget - total_spent
 
     if not st.session_state.expenses.empty:
-        paid_amount = st.session_state.expenses[st.session_state.expenses['Status'] == 'ชำระเงินแล้ว']['Amount'].sum()
+        paid_amount = st.session_state.expenses[st.session_state.expenses['Status'] == 'ชำrateเงินแล้ว']['Amount'].sum() if 'ชำระเงินแล้ว' in st.session_state.expenses['Status'].values else st.session_state.expenses[st.session_state.expenses['Status'] == 'ชำระเงินแล้ว']['Amount'].sum()
         unpaid_amount = total_spent - paid_amount
     else:
         paid_amount = 0.0
@@ -279,6 +282,8 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
     with tab_edit:
         if not st.session_state.todos.empty:
             st.markdown(f"**📋 รายการสิ่งที่ต้องทำในตาราง (มีทั้งหมด {len(st.session_state.todos)} รายการ):**")
+            
+            # แก้ไขแก้ปีกกาซ้อน f-string เรียบร้อยแล้ว
             def highlight_status(val):
                 colors = {
                     'ยังไม่ได้เริ่ม': '#f3f4f6', 
@@ -289,8 +294,6 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
                 }
                 bg_color = colors.get(val, '')
                 return f"background-color: {bg_color}; color: #1f2937;"
-                
-            styled_todos = st.session_state.todos.style.map(highlight_status, subset=['Status'])
 
             styled_todos = st.session_state.todos.style.map(highlight_status, subset=['Status'])
             st.data_editor(
@@ -319,7 +322,6 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
                     html_content += f"<h4 style='color: #4b5563; border-bottom: 2px solid #e5e7eb; padding-bottom: 4px; margin-top: 20px; font-size: 16px;'>📅 {month_group}</h4>"
                     month_tasks = view_df[view_df['MonthGroup'] == month_group]
                     for _, row in month_tasks.iterrows():
-                        badge = get_status_badge(row['Status']) if 'get_status_badge' in globals() else f"<span>{row['Status']}</span>"
                         display_date = row['SortDate'].strftime("%d/%m/%Y")
                         detail_val = row['Detail'] if pd.notna(row['Detail']) and row['Detail'] != "" else "-"
                         html_content += f"""<div style="padding: 12px; margin-bottom: 8px; border-radius: 8px; border: 1px solid #e5e7eb; background-color: #fafafa;">
