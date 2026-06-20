@@ -23,7 +23,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 2. AUTHENTICATION (SECURITY) ---
-APP_PASSWORD_HASH = hashlib.sha256("mooko".encode('utf-8')).hexdigest()
+APP_PASSWORD_HASH = hashlib.sha256("imukko".encode('utf-8')).hexdigest()
 
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
