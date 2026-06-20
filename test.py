@@ -30,6 +30,11 @@ def load_expenses():
             df = df.dropna(how="all")
             if 'Status' not in df.columns:
                 df['Status'] = 'ยังไม่ชำระเงิน'
+            # --- แก้ไขตรงนี้: บังคับให้คอลัมน์ Amount เป็นตัวเลขเสมอ ป้องกันค่า None ---
+            if 'Amount' in df.columns:
+                df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0.0)
+            else:
+                df['Amount'] = 0.0
             return df
     except:
         pass
@@ -93,8 +98,18 @@ def on_expenses_edit():
             df = df.drop(deleted_rows).reset_index(drop=True)
         for row_idx, changes in edited_rows.items():
             for col, val in changes.items():
+                if col == 'Amount':
+                    try:
+                        val = float(val)
+                    except:
+                        val = 0.0
                 df.at[int(row_idx), col] = val
         for row in added_rows:
+            if 'Amount' in row:
+                try:
+                    row['Amount'] = float(row['Amount'])
+                except:
+                    row['Amount'] = 0.0
             df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
             
         st.session_state.expenses = df
@@ -155,7 +170,7 @@ if page == "📊 Budget Tracker":
             new_row = pd.DataFrame([{
                 'Vendor': vendor, 
                 'Category': category, 
-                'Amount': amount, 
+                'Amount': float(amount), 
                 'Due Date': due_date.strftime("%d %B %Y"),
                 'Status': payment_status
             }])
@@ -169,7 +184,9 @@ if page == "📊 Budget Tracker":
 
     if not st.session_state.expenses.empty:
         paid_amount = st.session_state.expenses[st.session_state.expenses['Status'] == 'ชำระเงินแล้ว']['Amount'].sum()
-        unpaid_amount = st.session_state.expenses[st.session_state.expenses['Status'] == 'ยังไม่ชำระเงิน']['Amount'].sum()
+        unpaid_amount = st.session_state.expenses[st.session_state.expenses['Status'] == 'ยังไม่ชำเน็จเงิน']['Amount'].sum()
+        # ดึงยอดที่กรอกผิดหรือยังไม่ระบุจำนวนเงินด้วย
+        unpaid_amount = total_spent - paid_amount
     else:
         paid_amount = 0.0
         unpaid_amount = 0.0
@@ -206,8 +223,7 @@ if page == "📊 Budget Tracker":
 
     with tab_table:
         if not st.session_state.expenses.empty:
-            # สรุปจำนวนรายการให้เห็นเด่นชัดด้านบนตารางสำหรับเปิดบนโทรศัพท์
-            st.markdown(f"**📊 รายการค่าใช้จ่ายในระบบแต่ง (มีทั้งหมด {len(st.session_state.expenses)} รายการ):**")
+            st.markdown(f"**📊 รายการค่าใช้จ่ายในระบบ (มีทั้งหมด {len(st.session_state.expenses)} รายการ):**")
             
             def highlight_payment_status(val):
                 if val == 'ชำระเงินแล้ว':
@@ -218,13 +234,14 @@ if page == "📊 Budget Tracker":
 
             styled_expenses = st.session_state.expenses.style.map(highlight_payment_status, subset=['Status'])
             
+            # --- แก้ไขตรงนี้: ตั้งค่า NumberColumn ให้ยอมรับตัวเลขชัดเจน และไม่ปิดช่องว่างเป็น None ---
             st.data_editor(
                 styled_expenses,
                 column_config={
                     "Vendor": st.column_config.TextColumn("ร้านค้า", width="medium"),
                     "Category": None,  
                     "Due Date": None,  
-                    "Amount": st.column_config.NumberColumn("จำนวนเงิน", format="฿ %d", width="small"),
+                    "Amount": st.column_config.NumberColumn("จำนวนเงิน (บาท)", format="฿ %d", min_value=0, default=0, required=True, width="medium"),
                     "Status": st.column_config.SelectboxColumn("📌 สถานะ", options=["ยังไม่ชำระเงิน", "ชำระเงินแล้ว"], required=True, width="medium")
                 },
                 hide_index=False,
@@ -296,7 +313,6 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
 
     with tab_edit:
         if not st.session_state.todos.empty:
-            # ระบุจำนวนงานคงค้างทั้งหมดให้ชัดเจนด้านบนตัวตารางงาน
             st.markdown(f"**📋 รายการสิ่งที่ต้องทำในตาราง (มีทั้งหมด {len(st.session_state.todos)} รายการ):**")
             
             styled_todos = st.session_state.todos.style.map(highlight_status, subset=['Status'])
