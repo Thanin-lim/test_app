@@ -126,79 +126,12 @@ def save_itinerary(df):
     try: conn.update(worksheet="Itinerary", data=df)
     except Exception as e: st.error(f"❌ บันทึกล้มเหลว: {e}")
 
-# ==========================================
-# 4. NAVIGATION SYSTEM (HISTORY STACK)
-# ==========================================
-menu_options = [
-    "🏠 หน้าแรก (Dashboard)",
-    "📊 Budget Tracker",
-    "📝 สิ่งที่ต้องทำ (To-Do)",
-    "👥 รายชื่อแขก (Guest List)",
-    "⏱️ ตารางรันคิว (Itinerary)"
-]
-
-if "page_history" not in st.session_state:
-    st.session_state.page_history = []
-
-current_page = st.query_params.get(
-    "page",
-    "🏠 หน้าแรก (Dashboard)"
-)
-
-if current_page not in menu_options:
-    current_page = "🏠 หน้าแรก (Dashboard)"
-
-st.session_state.page = current_page
-
-def navigate_to(page_name):
-    current = st.session_state.page
-    if current != page_name:
-        st.session_state.page_history.append(current)
-
-    st.query_params["page"] = page_name
-    st.session_state.page = page_name
-    st.rerun()
-
-def go_back():
-    if st.session_state.page_history:
-        previous_page = st.session_state.page_history.pop()
-        st.query_params["page"] = previous_page
-        st.session_state.page = previous_page
-        st.rerun()
-
 # --- INITIALIZE STATE DATA ---
 if 'expenses' not in st.session_state: st.session_state.expenses = load_expenses()
 if 'total_budget' not in st.session_state: st.session_state.total_budget = load_budget()
 if 'todos' not in st.session_state: st.session_state.todos = load_todos()
 if 'guests' not in st.session_state: st.session_state.guests = load_guests()
 if 'itinerary' not in st.session_state: st.session_state.itinerary = load_itinerary()
-
-# ==========================================
-# 5. SIDEBAR NAVIGATION
-# ==========================================
-with st.sidebar:
-    st.markdown("## 💍 Wedding Menu")
-
-    if st.session_state.page_history:
-        if st.button("⬅️ ย้อนกลับ", use_container_width=True):
-            go_back()
-
-    st.markdown("---")
-
-    selected_page = st.radio(
-        "เลือกหน้าการทำงาน:",
-        menu_options,
-        index=menu_options.index(st.session_state.page)
-    )
-
-    if selected_page != st.session_state.page:
-        navigate_to(selected_page)
-
-    st.markdown("---")
-
-    if st.button("🚪 ออกจากระบบ", use_container_width=True):
-        st.session_state.authenticated = False
-        st.rerun()
 
 # --- CALLBACK FUNCTIONS ---
 def on_expenses_edit():
@@ -250,9 +183,10 @@ def on_itinerary_edit():
 
 
 # ==========================================
-# 🏠 หน้าแรก: EXECUTIVE DASHBOARD
+# 4. PAGE FUNCTIONS (สำหรับ Native Navigation)
 # ==========================================
-if st.session_state.page == "🏠 หน้าแรก (Dashboard)":
+
+def view_dashboard():
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("<h1 style='text-align: center; color: #db2777;'>✨ Wedding Planner Dashboard ✨</h1>", unsafe_allow_html=True)
     
@@ -286,23 +220,19 @@ if st.session_state.page == "🏠 หน้าแรก (Dashboard)":
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        if st.button("💰 ระบบงบประมาณ", use_container_width=True): navigate_to("📊 Budget Tracker")
+        if st.button("💰 ระบบงบประมาณ", use_container_width=True): st.switch_page(page_budget)
     with col2:
-        if st.button("📝 สิ่งที่ต้องทำ", use_container_width=True): navigate_to("📝 สิ่งที่ต้องทำ (To-Do)")
+        if st.button("📝 สิ่งที่ต้องทำ", use_container_width=True): st.switch_page(page_todo)
     with col3:
-        if st.button("👥 รายชื่อ & จัดโต๊ะ", use_container_width=True): navigate_to("👥 รายชื่อแขก (Guest List)")
+        if st.button("👥 รายชื่อ & จัดโต๊ะ", use_container_width=True): st.switch_page(page_guest)
     with col4:
-        if st.button("⏱️ ตารางรันคิว", use_container_width=True): navigate_to("⏱️ ตารางรันคิว (Itinerary)")
+        if st.button("⏱️ ตารางรันคิว", use_container_width=True): st.switch_page(page_itinerary)
 
 
-# ==========================================
-# PAGE 1: BUDGET TRACKER 
-# ==========================================
-elif st.session_state.page == "📊 Budget Tracker":
+def view_budget():
     col1, col2 = st.columns([1,8])
     with col1:
-        if st.button("⬅️ Back"):
-            go_back()
+        if st.button("⬅️ Home", key="btn_home_budget"): st.switch_page(page_dashboard)
             
     st.title("💰 Wedding Budget Dashboard")
     st.markdown("---")
@@ -340,14 +270,10 @@ elif st.session_state.page == "📊 Budget Tracker":
         st.data_editor(st.session_state.expenses.style.map(highlight_payment_status, subset=['Status']), hide_index=False, width='stretch', key="expense_editor", on_change=on_expenses_edit)
 
 
-# ==========================================
-# PAGE 2: TO-DO LIST 
-# ==========================================
-elif st.session_state.page == "📝 สิ่งที่ต้องทำ (To-Do)":
+def view_todo():
     col1, col2 = st.columns([1,8])
     with col1:
-        if st.button("⬅️ Back"):
-            go_back()
+        if st.button("⬅️ Home", key="btn_home_todo"): st.switch_page(page_dashboard)
             
     st.title("📝 เตรียมสิ่งที่ต้องทำ (To-Do List)")
     st.markdown("---")
@@ -371,14 +297,10 @@ elif st.session_state.page == "📝 สิ่งที่ต้องทำ (To-
         )
 
 
-# ==========================================
-# PAGE 3: GUEST LIST & SEATING 
-# ==========================================
-elif st.session_state.page == "👥 รายชื่อแขก (Guest List)":
+def view_guest():
     col1, col2 = st.columns([1,8])
     with col1:
-        if st.button("⬅️ Back"):
-            go_back()
+        if st.button("⬅️ Home", key="btn_home_guest"): st.switch_page(page_dashboard)
             
     st.title("👥 จัดการรายชื่อแขกและผังที่นั่ง")
 
@@ -442,14 +364,10 @@ elif st.session_state.page == "👥 รายชื่อแขก (Guest List)"
                 st.warning("ยังไม่มีแขกที่ยืนยันเข้าร่วมงาน (RSVP = ยืนยันเข้าร่วม)")
 
 
-# ==========================================
-# PAGE 4: ITINERARY (ตารางรันคิว)
-# ==========================================
-elif st.session_state.page == "⏱️ ตารางรันคิว (Itinerary)":
+def view_itinerary():
     col1, col2 = st.columns([1,8])
     with col1:
-        if st.button("⬅️ Back"):
-            go_back()
+        if st.button("⬅️ Home", key="btn_home_itin"): st.switch_page(page_dashboard)
             
     st.title("⏱️ ตารางรันคิววันงาน")
     st.markdown("จัดเรียงลำดับพิธีการ สถานที่ และผู้รับผิดชอบ เพื่อให้ทุกฝ่ายทำงานตรงกัน")
@@ -473,3 +391,28 @@ elif st.session_state.page == "⏱️ ตารางรันคิว (Itinera
     st.markdown("<br>", unsafe_allow_html=True)
     if not st.session_state.itinerary.empty:
         st.data_editor(st.session_state.itinerary, width='stretch', key="itin_editor", on_change=on_itinerary_edit)
+
+
+# ==========================================
+# 5. STREAMLIT NATIVE NAVIGATION SETUP
+# ==========================================
+
+# นิยามหน้าเว็บให้ Streamlit รู้จัก
+page_dashboard = st.Page(view_dashboard, title="หน้าแรก (Dashboard)", icon="🏠", url_path="dashboard", default=True)
+page_budget = st.Page(view_budget, title="Budget Tracker", icon="📊", url_path="budget")
+page_todo = st.Page(view_todo, title="สิ่งที่ต้องทำ (To-Do)", icon="📝", url_path="todo")
+page_guest = st.Page(view_guest, title="รายชื่อแขก (Guest List)", icon="👥", url_path="guests")
+page_itinerary = st.Page(view_itinerary, title="ตารางรันคิว (Itinerary)", icon="⏱️", url_path="itinerary")
+
+# สร้าง Navigation (Streamlit จะสร้าง Sidebar ให้เองอัตโนมัติ)
+pg = st.navigation([page_dashboard, page_budget, page_todo, page_guest, page_itinerary])
+
+# เพิ่มปุ่ม Logout ไว้ใต้สุดของ Sidebar ที่ Streamlit สร้างให้
+with st.sidebar:
+    st.markdown("---")
+    if st.button("🚪 ออกจากระบบ", use_container_width=True):
+        st.session_state.authenticated = False
+        st.rerun()
+
+# สั่งรันแอปพลิเคชัน
+pg.run()
