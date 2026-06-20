@@ -126,52 +126,76 @@ def save_itinerary(df):
     try: conn.update(worksheet="Itinerary", data=df)
     except Exception as e: st.error(f"❌ บันทึกล้มเหลว: {e}")
 
-# --- 4. NAVIGATION SYSTEM (SSOT & URL SYNC) ---
+# ==========================================
+# 4. NAVIGATION SYSTEM (HISTORY STACK)
+# ==========================================
 menu_options = [
-    "🏠 หน้าแรก (Dashboard)", 
-    "📊 Budget Tracker", 
-    "📝 สิ่งที่ต้องทำ (To-Do)", 
-    "👥 รายชื่อแขก (Guest List)", 
+    "🏠 หน้าแรก (Dashboard)",
+    "📊 Budget Tracker",
+    "📝 สิ่งที่ต้องทำ (To-Do)",
+    "👥 รายชื่อแขก (Guest List)",
     "⏱️ ตารางรันคิว (Itinerary)"
 ]
 
-# ดึงค่าจาก URL เป็นหลัก (ถ้าไม่มีให้ตั้งเป็นหน้าแรก)
-current_page = st.query_params.get("page", "🏠 หน้าแรก (Dashboard)")
+if "page_history" not in st.session_state:
+    st.session_state.page_history = []
+
+current_page = st.query_params.get(
+    "page",
+    "🏠 หน้าแรก (Dashboard)"
+)
+
 if current_page not in menu_options:
     current_page = "🏠 หน้าแรก (Dashboard)"
 
-# ซิงค์ State ให้ตรงกับ URL เสมอ
 st.session_state.page = current_page
 
-# ฟังก์ชันกลางสำหรับสั่งเปลี่ยนหน้า
 def navigate_to(page_name):
+    current = st.session_state.page
+    if current != page_name:
+        st.session_state.page_history.append(current)
+
     st.query_params["page"] = page_name
     st.session_state.page = page_name
     st.rerun()
 
-# โหลดข้อมูลพื้นฐาน
+def go_back():
+    if st.session_state.page_history:
+        previous_page = st.session_state.page_history.pop()
+        st.query_params["page"] = previous_page
+        st.session_state.page = previous_page
+        st.rerun()
+
+# --- INITIALIZE STATE DATA ---
 if 'expenses' not in st.session_state: st.session_state.expenses = load_expenses()
 if 'total_budget' not in st.session_state: st.session_state.total_budget = load_budget()
 if 'todos' not in st.session_state: st.session_state.todos = load_todos()
 if 'guests' not in st.session_state: st.session_state.guests = load_guests()
 if 'itinerary' not in st.session_state: st.session_state.itinerary = load_itinerary()
 
-# --- 5. SIDEBAR NAVIGATION ---
+# ==========================================
+# 5. SIDEBAR NAVIGATION
+# ==========================================
 with st.sidebar:
     st.markdown("## 💍 Wedding Menu")
-    
-    # ใช้ index คุมแทน key ป้องกันปัญหาแอปจำค่าเก่าตอนกดย้อนกลับ
+
+    if st.session_state.page_history:
+        if st.button("⬅️ ย้อนกลับ", use_container_width=True):
+            go_back()
+
+    st.markdown("---")
+
     selected_page = st.radio(
-        "เลือกหน้าการทำงาน:", 
-        menu_options, 
+        "เลือกหน้าการทำงาน:",
+        menu_options,
         index=menu_options.index(st.session_state.page)
     )
-    
-    # ถ้าผู้ใช้กดเปลี่ยนเมนู
+
     if selected_page != st.session_state.page:
         navigate_to(selected_page)
-        
+
     st.markdown("---")
+
     if st.button("🚪 ออกจากระบบ", use_container_width=True):
         st.session_state.authenticated = False
         st.rerun()
@@ -224,6 +248,7 @@ def on_itinerary_edit():
         df = df.dropna(subset=['Activity'])
         st.session_state.itinerary = df; save_itinerary(df)
 
+
 # ==========================================
 # 🏠 หน้าแรก: EXECUTIVE DASHBOARD
 # ==========================================
@@ -269,11 +294,16 @@ if st.session_state.page == "🏠 หน้าแรก (Dashboard)":
     with col4:
         if st.button("⏱️ ตารางรันคิว", use_container_width=True): navigate_to("⏱️ ตารางรันคิว (Itinerary)")
 
+
 # ==========================================
 # PAGE 1: BUDGET TRACKER 
 # ==========================================
 elif st.session_state.page == "📊 Budget Tracker":
-    if st.button("⬅️ กลับหน้าหลัก", type="secondary"): navigate_to("🏠 หน้าแรก (Dashboard)")
+    col1, col2 = st.columns([1,8])
+    with col1:
+        if st.button("⬅️ Back"):
+            go_back()
+            
     st.title("💰 Wedding Budget Dashboard")
     st.markdown("---")
 
@@ -309,11 +339,16 @@ elif st.session_state.page == "📊 Budget Tracker":
             return 'background-color: #dcfce7; color: #166534;' if val == 'ชำระเงินแล้ว' else 'background-color: #fee2e2; color: #991b1b;'
         st.data_editor(st.session_state.expenses.style.map(highlight_payment_status, subset=['Status']), hide_index=False, width='stretch', key="expense_editor", on_change=on_expenses_edit)
 
+
 # ==========================================
 # PAGE 2: TO-DO LIST 
 # ==========================================
 elif st.session_state.page == "📝 สิ่งที่ต้องทำ (To-Do)":
-    if st.button("⬅️ กลับหน้าหลัก", type="secondary"): navigate_to("🏠 หน้าแรก (Dashboard)")
+    col1, col2 = st.columns([1,8])
+    with col1:
+        if st.button("⬅️ Back"):
+            go_back()
+            
     st.title("📝 เตรียมสิ่งที่ต้องทำ (To-Do List)")
     st.markdown("---")
 
@@ -335,11 +370,16 @@ elif st.session_state.page == "📝 สิ่งที่ต้องทำ (To-
             hide_index=False, width='stretch', key="todo_editor", on_change=on_todos_edit
         )
 
+
 # ==========================================
 # PAGE 3: GUEST LIST & SEATING 
 # ==========================================
 elif st.session_state.page == "👥 รายชื่อแขก (Guest List)":
-    if st.button("⬅️ กลับหน้าหลัก", type="secondary"): navigate_to("🏠 หน้าแรก (Dashboard)")
+    col1, col2 = st.columns([1,8])
+    with col1:
+        if st.button("⬅️ Back"):
+            go_back()
+            
     st.title("👥 จัดการรายชื่อแขกและผังที่นั่ง")
 
     total_guests = len(st.session_state.guests)
@@ -401,11 +441,16 @@ elif st.session_state.page == "👥 รายชื่อแขก (Guest List)"
             else:
                 st.warning("ยังไม่มีแขกที่ยืนยันเข้าร่วมงาน (RSVP = ยืนยันเข้าร่วม)")
 
+
 # ==========================================
 # PAGE 4: ITINERARY (ตารางรันคิว)
 # ==========================================
 elif st.session_state.page == "⏱️ ตารางรันคิว (Itinerary)":
-    if st.button("⬅️ กลับหน้าหลัก", type="secondary"): navigate_to("🏠 หน้าแรก (Dashboard)")
+    col1, col2 = st.columns([1,8])
+    with col1:
+        if st.button("⬅️ Back"):
+            go_back()
+            
     st.title("⏱️ ตารางรันคิววันงาน")
     st.markdown("จัดเรียงลำดับพิธีการ สถานที่ และผู้รับผิดชอบ เพื่อให้ทุกฝ่ายทำงานตรงกัน")
     st.markdown("---")
