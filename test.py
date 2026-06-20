@@ -59,9 +59,7 @@ def load_budget():
     return 190000.00 
 
 def save_budget(amount):
-    try:
-        df = pd.DataFrame({"Total Budget": [amount]})
-        conn.update(worksheet="Budget", data=df)
+    try: df = pd.DataFrame({"Total Budget": [amount]}); conn.update(worksheet="Budget", data=df)
     except Exception as e: st.error(f"❌ บันทึกล้มเหลว: {e}")
 
 def load_expenses():
@@ -91,10 +89,7 @@ def load_todos():
                 df['Deadline'] = pd.to_datetime(df['Deadline']).dt.date 
                 return df
     except Exception: pass
-    return pd.DataFrame({
-        'Status': ['ยังไม่ได้เริ่ม', 'ยังไม่ได้เริ่ม'], 'Task': ['จองสถานที่จัดงาน', 'ลิสต์รายชื่อแขก'],
-        'Deadline': [date(2026, 11, 24), date(2026, 12, 1)], 'Detail': ['โรงแรม หรือ สวนในเมือง', 'รวมญาติฝั่งเจ้าสาวและเจ้าบ่าว']
-    })
+    return pd.DataFrame({'Status': ['ยังไม่ได้เริ่ม'], 'Task': ['ลิสต์รายชื่อแขก'], 'Deadline': [date(2026, 12, 1)], 'Detail': ['']})
 
 def save_todos(df):
     try: conn.update(worksheet="Todos", data=df)
@@ -131,37 +126,48 @@ def save_itinerary(df):
     try: conn.update(worksheet="Itinerary", data=df)
     except Exception as e: st.error(f"❌ บันทึกล้มเหลว: {e}")
 
-# --- 4. INITIALIZE SESSION STATE & URL SYNC (Swipe to Go Back) ---
-if 'page' not in st.query_params:
-    st.query_params["page"] = "🏠 หน้าแรก (Dashboard)"
+# --- 4. NAVIGATION SYSTEM (SSOT & URL SYNC) ---
+menu_options = [
+    "🏠 หน้าแรก (Dashboard)", 
+    "📊 Budget Tracker", 
+    "📝 สิ่งที่ต้องทำ (To-Do)", 
+    "👥 รายชื่อแขก (Guest List)", 
+    "⏱️ ตารางรันคิว (Itinerary)"
+]
 
-# ซิงค์หน้าปัจจุบันกับ URL Parameter เสมอ
-st.session_state.page = st.query_params["page"]
+# ดึงค่าจาก URL เป็นหลัก (ถ้าไม่มีให้ตั้งเป็นหน้าแรก)
+current_page = st.query_params.get("page", "🏠 หน้าแรก (Dashboard)")
+if current_page not in menu_options:
+    current_page = "🏠 หน้าแรก (Dashboard)"
 
-# ฟังก์ชันสำหรับการเปลี่ยนหน้า (เพื่อดักจับ URL)
+# ซิงค์ State ให้ตรงกับ URL เสมอ
+st.session_state.page = current_page
+
+# ฟังก์ชันกลางสำหรับสั่งเปลี่ยนหน้า
 def navigate_to(page_name):
     st.query_params["page"] = page_name
     st.session_state.page = page_name
     st.rerun()
 
+# โหลดข้อมูลพื้นฐาน
 if 'expenses' not in st.session_state: st.session_state.expenses = load_expenses()
 if 'total_budget' not in st.session_state: st.session_state.total_budget = load_budget()
 if 'todos' not in st.session_state: st.session_state.todos = load_todos()
 if 'guests' not in st.session_state: st.session_state.guests = load_guests()
 if 'itinerary' not in st.session_state: st.session_state.itinerary = load_itinerary()
 
-# --- 5. SIDEBAR NAVIGATION (แถบสไลด์เมนูด้านข้าง) ---
+# --- 5. SIDEBAR NAVIGATION ---
 with st.sidebar:
     st.markdown("## 💍 Wedding Menu")
-    menu_options = [
-        "🏠 หน้าแรก (Dashboard)", 
-        "📊 Budget Tracker", 
-        "📝 สิ่งที่ต้องทำ (To-Do)", 
-        "👥 รายชื่อแขก (Guest List)", 
-        "⏱️ ตารางรันคิว (Itinerary)"
-    ]
     
-    selected_page = st.radio("เลือกหน้าการทำงาน:", menu_options, index=menu_options.index(st.session_state.page))
+    # ใช้ index คุมแทน key ป้องกันปัญหาแอปจำค่าเก่าตอนกดย้อนกลับ
+    selected_page = st.radio(
+        "เลือกหน้าการทำงาน:", 
+        menu_options, 
+        index=menu_options.index(st.session_state.page)
+    )
+    
+    # ถ้าผู้ใช้กดเปลี่ยนเมนู
     if selected_page != st.session_state.page:
         navigate_to(selected_page)
         
@@ -217,7 +223,6 @@ def on_itinerary_edit():
             for col, val in changes.items(): df.at[int(row_idx), col] = val
         df = df.dropna(subset=['Activity'])
         st.session_state.itinerary = df; save_itinerary(df)
-
 
 # ==========================================
 # 🏠 หน้าแรก: EXECUTIVE DASHBOARD
