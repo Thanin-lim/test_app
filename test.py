@@ -43,7 +43,6 @@ def load_todos():
         df = conn.read(worksheet="Todos", ttl=0)
         if not df.empty:
             df = df.dropna(how="all")
-            # รองรับคอลัมน์ Detail
             if 'Detail' not in df.columns:
                 df['Detail'] = ''
             if not df.empty and 'Deadline' in df.columns:
@@ -113,7 +112,6 @@ if page == "📊 Budget Tracker":
         ])
         amount = st.number_input("จำนวนเงิน (THB)", min_value=0.0, step=1000.0)
         due_date = st.date_input("กำหนดชำระเงิน", min_value=date.today())
-        
         payment_status = st.selectbox("สถานะ", ["ยังไม่ชำระเงิน", "ชำระเงินแล้ว"])
         
         submit_button = st.form_submit_button("เพิ่มลงในบัญชี")
@@ -191,7 +189,8 @@ if page == "📊 Budget Tracker":
                     "Status": st.column_config.SelectboxColumn("📌 สถานะ", options=["ยังไม่ชำระเงิน", "ชำระเงินแล้ว"], required=True, width="medium")
                 },
                 hide_index=True,
-                use_container_width=True
+                use_container_width=True,
+                num_rows="dynamic"
             )
             
             if not edited_expenses.equals(st.session_state.expenses):
@@ -257,69 +256,56 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
             save_todos(st.session_state.todos) 
             st.rerun()
 
-    tab_edit, tab_view = st.tabs(["✏️ อัปเดตสถานะงาน", "📌 ภาพรวมรายเดือน"])
+    tab_edit, tab_view = st.tabs(["✏️ อัปเดตสถานะและรายละเอียด", "📌 ภาพรวมรายเดือน"])
 
     with tab_edit:
         if not st.session_state.todos.empty:
             styled_todos = st.session_state.todos.style.map(highlight_status, subset=['Status'])
             
-            # ตารางแสดงเพื่อง่ายต่อการอัปเดตสถานะ (ซ่อนคอล็มน์ Detail เพื่อให้แสดงผลบนมือถือสวยงาม)
             edited_df = st.data_editor(
                 styled_todos,
                 column_config={
                     "Status": st.column_config.SelectboxColumn("📌 สถานะ", options=["ยังไม่ได้เริ่ม", "อยู่ระหว่างดำเนินการ", "หยุดไว้ชั่วคราว", "ไม่จำเป็น", "เสร็จแล้ว"], required=True, width="medium"),
-                    "Task": st.column_config.TextColumn("📋 งาน", disabled=True, width="medium"),
+                    "Task": st.column_config.TextColumn("📋 งาน (แก้ไขชื่องานได้)", disabled=False, width="medium"), 
                     "Deadline": st.column_config.DateColumn("📅 กำหนด", disabled=False, format="DD/MM/YYYY", width="small"),
-                    "Detail": None # ซ่อนจากหน้าตารางหลักเพื่อไม่ให้จอล้น
+                    "Detail": st.column_config.TextColumn("🏠 รายละเอียด/Note (กดแก้ไขได้)", disabled=False, width="large")
                 },
-                hide_index=True,
-                use_container_width=True
+                hide_index=False, 
+                use_container_width=True,
+                num_rows="dynamic"
             )
             
             if not edited_df.equals(st.session_state.todos):
+                edited_df = edited_df.dropna(subset=['Task'])
                 st.session_state.todos = edited_df
                 save_todos(st.session_state.todos) 
                 st.rerun() 
-                
-            # --- ส่วนสำหรับกดดูรายละเอียดของแต่ละงานบนมือถือ ---
-            st.markdown("---")
-            st.markdown("### 🔍 เลือกงานที่ต้องการดูรายละเอียด")
-            task_list = st.session_state.todos['Task'].tolist()
-            selected_task = st.selectbox("เลือกงานที่ต้องการตรวจสอบ:", task_list, index=0 if task_list else None)
-            
-            if selected_task:
-                task_info = st.session_state.todos[st.session_state.todos['Task'] == selected_task].iloc[0]
-                detail_text = task_info['Detail'] if pd.notna(task_info['Detail']) and task_info['Detail'] != "" else "ไม่มีการระบุรายละเอียด"
-                
-                # กล่องแสดงรายละเอียดที่กดเลือก
-                st.info(f"""
-                **📋 ชื่องาน:** {task_info['Task']}  
-                **📅 ครบกำหนด:** {task_info['Deadline'].strftime('%d/%m/%Y') if hasattr(task_info['Deadline'], 'strftime') else task_info['Deadline']}  
-                **📌 สถานะปัจจุบัน:** {task_info['Status']}  
-                **🏠 รายละเอียด/สถานที่:** {detail_text}
-                """)
-            
         else:
             st.info("ยังไม่มีรายการสิ่งที่ต้องทำ")
 
     with tab_view:
         if not st.session_state.todos.empty:
-            view_df = st.session_state.todos.copy()
-            view_df['SortDate'] = pd.to_datetime(view_df['Deadline'])
-            view_df = view_df.sort_values('SortDate')
-            view_df['MonthGroup'] = view_df['SortDate'].apply(get_thai_month_year)
+            # --- อัปเดตตรงนี้: ใช้ st.columns แบ่งหน้าจอในแท็บภาพรวมเป็นฝั่งซ้ายและฝั่งขวา ---
+            col_left, col_right = st.columns([1.2, 1.0]) # ซ้ายภาพรวม ขวากล่องดรอปดาวน์ตรวจโน้ตใหญ่
             
-            html_content = ""
-            for month_group in view_df['MonthGroup'].unique():
-                html_content += f"<h4 style='color: #4b5563; border-bottom: 2px solid #e5e7eb; padding-bottom: 4px; margin-top: 20px; font-size: 16px;'>📅 {month_group}</h4>"
-                month_tasks = view_df[view_df['MonthGroup'] == month_group]
+            with col_left:
+                st.markdown("### 📅 รายการงานรายเดือน")
+                view_df = st.session_state.todos.copy()
+                view_df['SortDate'] = pd.to_datetime(view_df['Deadline'])
+                view_df = view_df.sort_values('SortDate')
+                view_df['MonthGroup'] = view_df['SortDate'].apply(get_thai_month_year)
                 
-                for _, row in month_tasks.iterrows():
-                    badge = get_status_badge(row['Status'])
-                    display_date = row['SortDate'].strftime("%d/%m/%Y")
-                    detail_val = row['Detail'] if pd.notna(row['Detail']) and row['Detail'] != "" else "-"
+                html_content = ""
+                for month_group in view_df['MonthGroup'].unique():
+                    html_content += f"<h4 style='color: #4b5563; border-bottom: 2px solid #e5e7eb; padding-bottom: 4px; margin-top: 20px; font-size: 16px;'>📅 {month_group}</h4>"
+                    month_tasks = view_df[view_df['MonthGroup'] == month_group]
                     
-                    html_content += f"""<div style="padding: 12px; margin-bottom: 8px; border-radius: 8px; border: 1px solid #e5e7eb; background-color: #fafafa;">
+                    for _, row in month_tasks.iterrows():
+                        badge = get_status_badge(row['Status'])
+                        display_date = row['SortDate'].strftime("%d/%m/%Y")
+                        detail_val = row['Detail'] if pd.notna(row['Detail']) and row['Detail'] != "" else "-"
+                        
+                        html_content += f"""<div style="padding: 12px; margin-bottom: 8px; border-radius: 8px; border: 1px solid #e5e7eb; background-color: #fafafa;">
 <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px; margin-bottom: 6px;">
 <span style="font-weight: 600; font-size: 14px;">{row['Task']}</span>
 {badge}
@@ -327,12 +313,32 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
 <div style="color: #6b7280; font-size: 12px; margin-bottom: 4px;">📅 ครบกำหนด: {display_date}</div>
 <div style="color: #4b5563; font-size: 13px; background-color: #f3f4f6; padding: 6px; border-radius: 4px; margin-top: 4px;">🏠 รายละเอียด: {detail_val}</div>
 </div>"""
-            st.markdown(html_content, unsafe_allow_html=True)
+                st.markdown(html_content, unsafe_allow_html=True)
+                
+            with col_right:
+                st.markdown("### 🔍 ตรวจสอบรายละเอียดรายชิ้น")
+                task_list = st.session_state.todos['Task'].tolist()
+                selected_task = st.selectbox("เลือกงานเพื่อดู Note ตัวโตๆ:", task_list, index=0 if task_list else None)
+                
+                if selected_task:
+                    filtered_todo = st.session_state.todos[st.session_state.todos['Task'] == selected_task]
+                    if not filtered_todo.empty:
+                        task_info = filtered_todo.iloc[0]
+                        detail_text = task_info['Detail'] if pd.notna(task_info['Detail']) and task_info['Detail'] != "" else "ไม่มีการระบุรายละเอียด"
+                        
+                        st.info(f"""
+                        **📋 ชื่องาน:** {task_info['Task']}  
+                        
+                        **📅 วันครบกำหนด:** {task_info['Deadline'].strftime('%d/%m/%Y') if hasattr(task_info['Deadline'], 'strftime') else task_info['Deadline']}  
+                        
+                        **📌 สถานะปัจจุบัน:** {task_info['Status']}  
+                        
+                        **🏠 รายละเอียด/Note สำคัญ:** {detail_text}
+                        """)
         else:
             st.write("-")
 
     st.markdown("---")
-    
     if not st.session_state.todos.empty:
         if st.button("🗑️ ลบงานที่ 'เสร็จแล้ว' และ 'ไม่จำเป็น'"):
             st.session_state.todos = st.session_state.todos[
