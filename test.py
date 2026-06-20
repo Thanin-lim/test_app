@@ -12,49 +12,13 @@ st.set_page_config(page_title="Wedding Planner Dashboard", page_icon="💍", lay
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap');
-        
-        html, body, [class*="css"] {
-            font-family: 'Kanit', sans-serif;
-        }
-        
-        /* ตกแต่งปุ่มกด */
-        div.stButton > button {
-            border-radius: 20px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            border: 1px solid #fbcfe8;
-        }
-        div.stButton > button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 10px rgba(219, 39, 119, 0.15);
-            border-color: #f472b6;
-        }
-        
-        /* ตกแต่ง Metric Cards (กล่องตัวเลข) */
-        div[data-testid="metric-container"] {
-            background-color: #ffffff;
-            border: 1px solid #fce7f3;
-            padding: 15px 20px;
-            border-radius: 16px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-            transition: transform 0.2s ease;
-        }
-        div[data-testid="metric-container"]:hover {
-            transform: scale(1.02);
-        }
-        
-        /* หัวข้อ */
-        h1, h2, h3 {
-            color: #db2777;
-        }
-        
-        /* กรอบแบบฟอร์ม */
-        div[data-testid="stForm"] {
-            background-color: #fffafc;
-            border-radius: 16px;
-            border: 1px solid #fbcfe8;
-            padding: 20px;
-        }
+        html, body, [class*="css"] { font-family: 'Kanit', sans-serif; }
+        div.stButton > button { border-radius: 20px; font-weight: 500; transition: all 0.3s ease; border: 1px solid #fbcfe8; }
+        div.stButton > button:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(219, 39, 119, 0.15); border-color: #f472b6; }
+        div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #fce7f3; padding: 15px 20px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); transition: transform 0.2s ease; }
+        div[data-testid="metric-container"]:hover { transform: scale(1.02); }
+        h1, h2, h3 { color: #db2777; }
+        div[data-testid="stForm"] { background-color: #fffafc; border-radius: 16px; border: 1px solid #fbcfe8; padding: 20px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -90,8 +54,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def load_budget():
     try:
         df = conn.read(worksheet="Budget", usecols=[0], ttl=10)
-        if not df.empty and pd.notna(df.iloc[0, 0]):
-            return float(df.iloc[0, 0])
+        if not df.empty and pd.notna(df.iloc[0, 0]): return float(df.iloc[0, 0])
     except Exception: pass
     return 190000.00 
 
@@ -99,7 +62,7 @@ def save_budget(amount):
     try:
         df = pd.DataFrame({"Total Budget": [amount]})
         conn.update(worksheet="Budget", data=df)
-    except Exception as e: st.error(f"❌ บันทึกงบประมาณล้มเหลว: {e}")
+    except Exception as e: st.error(f"❌ บันทึกล้มเหลว: {e}")
 
 def load_expenses():
     try:
@@ -135,7 +98,7 @@ def load_todos():
 
 def save_todos(df):
     try: conn.update(worksheet="Todos", data=df)
-    except Exception as e: st.error(f"❌ บันทึก To-Do ล้มเหลว: {e}")
+    except Exception as e: st.error(f"❌ บันทึกล้มเหลว: {e}")
 
 def load_guests():
     try:
@@ -168,20 +131,44 @@ def save_itinerary(df):
     try: conn.update(worksheet="Itinerary", data=df)
     except Exception as e: st.error(f"❌ บันทึกล้มเหลว: {e}")
 
-def get_thai_month_year(date_val):
-    try:
-        d = pd.to_datetime(date_val)
-        thai_months = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
-        return f"{thai_months[d.month - 1]} {d.year}"
-    except: return "ไม่ระบุ"
+# --- 4. INITIALIZE SESSION STATE & URL SYNC (Swipe to Go Back) ---
+if 'page' not in st.query_params:
+    st.query_params["page"] = "🏠 หน้าแรก (Dashboard)"
 
-# --- 4. INITIALIZE SESSION STATE ---
+# ซิงค์หน้าปัจจุบันกับ URL Parameter เสมอ
+st.session_state.page = st.query_params["page"]
+
+# ฟังก์ชันสำหรับการเปลี่ยนหน้า (เพื่อดักจับ URL)
+def navigate_to(page_name):
+    st.query_params["page"] = page_name
+    st.session_state.page = page_name
+    st.rerun()
+
 if 'expenses' not in st.session_state: st.session_state.expenses = load_expenses()
 if 'total_budget' not in st.session_state: st.session_state.total_budget = load_budget()
 if 'todos' not in st.session_state: st.session_state.todos = load_todos()
 if 'guests' not in st.session_state: st.session_state.guests = load_guests()
 if 'itinerary' not in st.session_state: st.session_state.itinerary = load_itinerary()
-if 'page' not in st.session_state: st.session_state.page = "🏠 หน้าแรก (Dashboard)"
+
+# --- 5. SIDEBAR NAVIGATION (แถบสไลด์เมนูด้านข้าง) ---
+with st.sidebar:
+    st.markdown("## 💍 Wedding Menu")
+    menu_options = [
+        "🏠 หน้าแรก (Dashboard)", 
+        "📊 Budget Tracker", 
+        "📝 สิ่งที่ต้องทำ (To-Do)", 
+        "👥 รายชื่อแขก (Guest List)", 
+        "⏱️ ตารางรันคิว (Itinerary)"
+    ]
+    
+    selected_page = st.radio("เลือกหน้าการทำงาน:", menu_options, index=menu_options.index(st.session_state.page))
+    if selected_page != st.session_state.page:
+        navigate_to(selected_page)
+        
+    st.markdown("---")
+    if st.button("🚪 ออกจากระบบ", use_container_width=True):
+        st.session_state.authenticated = False
+        st.rerun()
 
 # --- CALLBACK FUNCTIONS ---
 def on_expenses_edit():
@@ -196,8 +183,7 @@ def on_expenses_edit():
                     try: val = float(val)
                     except: val = 0.0
                 df.at[int(row_idx), col] = val
-        st.session_state.expenses = df
-        save_expenses(df)
+        st.session_state.expenses = df; save_expenses(df)
 
 def on_todos_edit():
     edited_rows = st.session_state.todo_editor.get("edited_rows", {})
@@ -206,11 +192,9 @@ def on_todos_edit():
         df = st.session_state.todos.copy()
         if deleted_rows: df = df.drop(deleted_rows).reset_index(drop=True)
         for row_idx, changes in edited_rows.items():
-            for col, val in changes.items():
-                df.at[int(row_idx), col] = val
+            for col, val in changes.items(): df.at[int(row_idx), col] = val
         df = df.dropna(subset=['Task'])
-        st.session_state.todos = df
-        save_todos(df)
+        st.session_state.todos = df; save_todos(df)
 
 def on_guests_edit():
     edited_rows = st.session_state.guest_editor.get("edited_rows", {})
@@ -219,11 +203,9 @@ def on_guests_edit():
         df = st.session_state.guests.copy()
         if deleted_rows: df = df.drop(deleted_rows).reset_index(drop=True)
         for row_idx, changes in edited_rows.items():
-            for col, val in changes.items():
-                df.at[int(row_idx), col] = val
+            for col, val in changes.items(): df.at[int(row_idx), col] = val
         df = df.dropna(subset=['Guest Name'])
-        st.session_state.guests = df
-        save_guests(df)
+        st.session_state.guests = df; save_guests(df)
 
 def on_itinerary_edit():
     edited_rows = st.session_state.itin_editor.get("edited_rows", {})
@@ -232,11 +214,10 @@ def on_itinerary_edit():
         df = st.session_state.itinerary.copy()
         if deleted_rows: df = df.drop(deleted_rows).reset_index(drop=True)
         for row_idx, changes in edited_rows.items():
-            for col, val in changes.items():
-                df.at[int(row_idx), col] = val
+            for col, val in changes.items(): df.at[int(row_idx), col] = val
         df = df.dropna(subset=['Activity'])
-        st.session_state.itinerary = df
-        save_itinerary(df)
+        st.session_state.itinerary = df; save_itinerary(df)
+
 
 # ==========================================
 # 🏠 หน้าแรก: EXECUTIVE DASHBOARD
@@ -275,19 +256,19 @@ if st.session_state.page == "🏠 หน้าแรก (Dashboard)":
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        if st.button("💰 ระบบงบประมาณ", use_container_width=True): st.session_state.page = "📊 Budget Tracker"; st.rerun()
+        if st.button("💰 ระบบงบประมาณ", use_container_width=True): navigate_to("📊 Budget Tracker")
     with col2:
-        if st.button("📝 สิ่งที่ต้องทำ", use_container_width=True): st.session_state.page = "📝 สิ่งที่ต้องทำ (To-Do)"; st.rerun()
+        if st.button("📝 สิ่งที่ต้องทำ", use_container_width=True): navigate_to("📝 สิ่งที่ต้องทำ (To-Do)")
     with col3:
-        if st.button("👥 รายชื่อ & จัดโต๊ะ", use_container_width=True): st.session_state.page = "👥 รายชื่อแขก (Guest List)"; st.rerun()
+        if st.button("👥 รายชื่อ & จัดโต๊ะ", use_container_width=True): navigate_to("👥 รายชื่อแขก (Guest List)")
     with col4:
-        if st.button("⏱️ ตารางรันคิว", use_container_width=True): st.session_state.page = "⏱️ ตารางรันคิว (Itinerary)"; st.rerun()
+        if st.button("⏱️ ตารางรันคิว", use_container_width=True): navigate_to("⏱️ ตารางรันคิว (Itinerary)")
 
 # ==========================================
 # PAGE 1: BUDGET TRACKER 
 # ==========================================
 elif st.session_state.page == "📊 Budget Tracker":
-    if st.button("⬅️ กลับหน้าหลัก", type="secondary"): st.session_state.page = "🏠 หน้าแรก (Dashboard)"; st.rerun()
+    if st.button("⬅️ กลับหน้าหลัก", type="secondary"): navigate_to("🏠 หน้าแรก (Dashboard)")
     st.title("💰 Wedding Budget Dashboard")
     st.markdown("---")
 
@@ -312,12 +293,10 @@ elif st.session_state.page == "📊 Budget Tracker":
             contact_info = v_col5.text_input("ช่องทางติดต่อ (เบอร์/Line)")
             payment_status = v_col6.selectbox("สถานะการจ่ายเงิน", ["ยังไม่ชำระเงิน", "ชำระเงินแล้ว"])
             
-            submit_button = st.form_submit_button("💾 เพิ่มลงในบัญชี")
-            if submit_button and vendor and amount > 0:
+            if st.form_submit_button("💾 เพิ่มลงในบัญชี") and vendor and amount > 0:
                 new_row = pd.DataFrame([{'Vendor': vendor, 'Category': category, 'Amount': float(amount), 'Due Date': due_date.strftime("%d %B %Y"), 'Status': payment_status, 'Contact': contact_info}])
                 st.session_state.expenses = pd.concat([st.session_state.expenses, new_row], ignore_index=True)
-                save_expenses(st.session_state.expenses)
-                st.success("เพิ่มสำเร็จ!"); st.rerun()
+                save_expenses(st.session_state.expenses); st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
     if not st.session_state.expenses.empty:
@@ -329,7 +308,7 @@ elif st.session_state.page == "📊 Budget Tracker":
 # PAGE 2: TO-DO LIST 
 # ==========================================
 elif st.session_state.page == "📝 สิ่งที่ต้องทำ (To-Do)":
-    if st.button("⬅️ กลับหน้าหลัก", type="secondary"): st.session_state.page = "🏠 หน้าแรก (Dashboard)"; st.rerun()
+    if st.button("⬅️ กลับหน้าหลัก", type="secondary"): navigate_to("🏠 หน้าแรก (Dashboard)")
     st.title("📝 เตรียมสิ่งที่ต้องทำ (To-Do List)")
     st.markdown("---")
 
@@ -341,8 +320,7 @@ elif st.session_state.page == "📝 สิ่งที่ต้องทำ (To-
         if st.form_submit_button("💾 เพิ่มงาน") and task_name:
             new_task = pd.DataFrame([{'Status': 'ยังไม่ได้เริ่ม', 'Task': task_name, 'Deadline': task_deadline, 'Detail': task_detail}])
             st.session_state.todos = pd.concat([st.session_state.todos, new_task], ignore_index=True)
-            save_todos(st.session_state.todos) 
-            st.rerun()
+            save_todos(st.session_state.todos); st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
     if not st.session_state.todos.empty:
@@ -356,7 +334,7 @@ elif st.session_state.page == "📝 สิ่งที่ต้องทำ (To-
 # PAGE 3: GUEST LIST & SEATING 
 # ==========================================
 elif st.session_state.page == "👥 รายชื่อแขก (Guest List)":
-    if st.button("⬅️ กลับหน้าหลัก", type="secondary"): st.session_state.page = "🏠 หน้าแรก (Dashboard)"; st.rerun()
+    if st.button("⬅️ กลับหน้าหลัก", type="secondary"): navigate_to("🏠 หน้าแรก (Dashboard)")
     st.title("👥 จัดการรายชื่อแขกและผังที่นั่ง")
 
     total_guests = len(st.session_state.guests)
@@ -422,7 +400,7 @@ elif st.session_state.page == "👥 รายชื่อแขก (Guest List)"
 # PAGE 4: ITINERARY (ตารางรันคิว)
 # ==========================================
 elif st.session_state.page == "⏱️ ตารางรันคิว (Itinerary)":
-    if st.button("⬅️ กลับหน้าหลัก", type="secondary"): st.session_state.page = "🏠 หน้าแรก (Dashboard)"; st.rerun()
+    if st.button("⬅️ กลับหน้าหลัก", type="secondary"): navigate_to("🏠 หน้าแรก (Dashboard)")
     st.title("⏱️ ตารางรันคิววันงาน")
     st.markdown("จัดเรียงลำดับพิธีการ สถานที่ และผู้รับผิดชอบ เพื่อให้ทุกฝ่ายทำงานตรงกัน")
     st.markdown("---")
@@ -440,8 +418,7 @@ elif st.session_state.page == "⏱️ ตารางรันคิว (Itinera
         if st.form_submit_button("💾 เพิ่มคิวงาน") and activity_val:
             new_itin = pd.DataFrame([{'Time': time_val, 'Activity': activity_val, 'Location': location_val, 'PIC': pic_val, 'Note': note_val}])
             st.session_state.itinerary = pd.concat([st.session_state.itinerary, new_itin], ignore_index=True)
-            save_itinerary(st.session_state.itinerary)
-            st.rerun()
+            save_itinerary(st.session_state.itinerary); st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
     if not st.session_state.itinerary.empty:
