@@ -8,7 +8,6 @@ from streamlit_gsheets import GSheetsConnection
 st.set_page_config(page_title="Wedding Planner Dashboard", page_icon="💍", layout="wide")
 
 # --- 2. GOOGLE SHEETS CONNECTION ---
-# สร้างตัวเชื่อมต่อกับ Google Sheets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_budget():
@@ -31,7 +30,7 @@ def load_expenses():
             return df.dropna(how="all")
     except:
         pass
-    return pd.DataFrame(columns=['Vendor', 'Category', 'Amount', 'Due Date'])
+    return pd.DataFrame(columns=['Vendor', 'Category', 'Amount', 'Due Date', 'Status'])
 
 def save_expenses(df):
     conn.update(worksheet="Expenses", data=df)
@@ -108,6 +107,8 @@ if page == "📊 Budget Tracker":
         amount = st.number_input("จำนวนเงิน (THB)", min_value=0.0, step=1000.0)
         due_date = st.date_input("กำหนดชำระเงิน", min_value=date.today())
         
+        payment_status = st.selectbox("สถานะ", ["ยังไม่ชำระเงิน", "ชำระเงินแล้ว"])
+        
         submit_button = st.form_submit_button("เพิ่มลงในบัญชี")
         
         if submit_button and vendor and amount > 0:
@@ -115,7 +116,8 @@ if page == "📊 Budget Tracker":
                 'Vendor': vendor, 
                 'Category': category, 
                 'Amount': amount, 
-                'Due Date': due_date.strftime("%d %B %Y")
+                'Due Date': due_date.strftime("%d %B %Y"),
+                'Status': payment_status
             }])
             st.session_state.expenses = pd.concat([st.session_state.expenses, new_row], ignore_index=True)
             save_expenses(st.session_state.expenses)
@@ -124,16 +126,18 @@ if page == "📊 Budget Tracker":
     total_spent = st.session_state.expenses['Amount'].sum()
     remaining_budget = st.session_state.total_budget - total_spent
 
+    # Metrics เรียงกันตามปกติ Streamlit จะปัดลงบรรทัดใหม่ให้อัตโนมัติบนมือถือ
     col1, col2, col3 = st.columns(3)
-    col1.metric("งบประมาณทั้งหมด 💰", f"฿ {st.session_state.total_budget:,.2f}")
-    col2.metric("ใช้จ่ายไปแล้ว 💸", f"฿ {total_spent:,.2f}", f"{(total_spent/st.session_state.total_budget)*100:.1f}% used" if st.session_state.total_budget > 0 else "")
-    col3.metric("งบประมาณคงเหลือ 🏦", f"฿ {remaining_budget:,.2f}")
+    col1.metric("งบประมาณทั้งหมด", f"฿ {st.session_state.total_budget:,.0f}")
+    col2.metric("ใช้ไปแล้ว", f"฿ {total_spent:,.0f}", f"{(total_spent/st.session_state.total_budget)*100:.1f}%" if st.session_state.total_budget > 0 else "")
+    col3.metric("คงเหลือ", f"฿ {remaining_budget:,.0f}")
 
     st.markdown("---")
 
-    col_chart, col_table = st.columns([1, 1.5])
-    with col_chart:
-        st.subheader("📊 สัดส่วนค่าใช้จ่าย")
+    # ปรับแต่งสำหรับมือถือ: ใช้ Tabs แทน Columns
+    tab_chart, tab_table = st.tabs(["📊 สัดส่วนค่าใช้จ่าย", "📝 ประวัติการชำระเงิน"])
+    
+    with tab_chart:
         if not st.session_state.expenses.empty:
             fig = px.pie(
                 st.session_state.expenses, 
@@ -142,15 +146,46 @@ if page == "📊 Budget Tracker":
                 hole=0.6,
                 color_discrete_sequence=px.colors.qualitative.Pastel
             )
-            fig.add_annotation(text=f"<b>฿ {total_spent:,.0f}</b><br>Total Cost", x=0.5, y=0.5, font_size=20, showarrow=False)
+            fig.add_annotation(text=f"<b>฿ {total_spent:,.0f}</b><br>Total Cost", x=0.5, y=0.5, font_size=18, showarrow=False)
+            # ย้าย Legend ลงไปด้านล่าง เพื่อให้กราฟบนมือถือไม่โดนบีบ
+            fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5))
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("เพิ่มค่าใช้จ่ายที่แถบด้านข้างเพื่อดูแผนภูมิ")
 
-    with col_table:
-        st.subheader("📝 ประวัติการชำระเงิน")
+    with tab_table:
         if not st.session_state.expenses.empty:
-            st.dataframe(st.session_state.expenses, use_container_width=True, hide_index=True)
+            def highlight_payment_status(val):
+                if val == 'ชำระเงินแล้ว':
+                    return 'background-color: #dcfce7; color: #166534;'
+                elif val == 'ยังไม่ชำระเงิน':
+                    return 'background-color: #fee2e2; color: #991b1b;'
+                return ''
+
+            styled_expenses = st.session_state.expenses.style.map(highlight_payment_status, subset=['Status'])
+            
+            edited_expenses = st.data_editor(
+                styled_expenses,
+                column_config={
+                    "Status": st.column_config.SelectboxColumn(
+                        "📌 สถานะ",
+                        options=["ยังไม่ชำระเงิน", "ชำระเงินแล้ว"],
+                        required=True
+                    ),
+                    "Amount": st.column_config.NumberColumn(
+                        "Amount",
+                        format="฿ %d"
+                    )
+                },
+                hide_index=True,
+                use_container_width=True
+            )
+            
+            if not edited_expenses.equals(st.session_state.expenses):
+                st.session_state.expenses = edited_expenses
+                save_expenses(st.session_state.expenses)
+                st.rerun()
+                
         else:
             st.info("ยังไม่มีการบันทึกการชำระเงิน")
 
@@ -159,7 +194,7 @@ if page == "📊 Budget Tracker":
 # ==========================================
 elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
     st.title("📝 เตรียมสิ่งที่ต้องทำ (To-Do List)")
-    st.write("บันทึกและติดตามความคืบหน้าของงานที่ต้องเตรียม แยกตามเดือน")
+    st.write("บันทึกและติดตามความคืบหน้าของงาน แยกตามเดือน")
     
     if not st.session_state.todos.empty:
         status_counts = st.session_state.todos['Status'].value_counts().reset_index()
@@ -184,12 +219,15 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
             color='Status',
             color_discrete_map=color_map
         )
-        fig_todo.add_annotation(text=f"<b>{completed_tasks} / {total_tasks}</b><br>ทำเสร็จแล้ว", x=0.5, y=0.5, font_size=20, showarrow=False)
-        fig_todo.update_layout(margin=dict(t=0, b=0, l=0, r=0)) 
+        fig_todo.add_annotation(text=f"<b>{completed_tasks} / {total_tasks}</b><br>ทำเสร็จแล้ว", x=0.5, y=0.5, font_size=18, showarrow=False)
+        # ปรับขอบและย้าย Legend เพื่อมือถือ
+        fig_todo.update_layout(
+            margin=dict(t=10, b=10, l=10, r=10),
+            legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5)
+        ) 
         
-        col_space1, col_pie, col_space2 = st.columns([1, 1.5, 1])
-        with col_pie:
-            st.plotly_chart(fig_todo, use_container_width=True)
+        # ถอด Columns ออก เพื่อให้กราฟโดนัทเต็มจอมือถือ
+        st.plotly_chart(fig_todo, use_container_width=True)
             
         st.markdown("---")
     
@@ -202,7 +240,7 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
             'เสร็จแล้ว': ('#dcfce7', '#166534', 'border: 1px solid #86efac;')
         }
         bg_color, text_color, border = colors.get(status, ('#ffffff', '#000000', ''))
-        return f'<span style="background-color: {bg_color}; color: {text_color}; {border} padding: 4px 12px; border-radius: 16px; font-size: 13px; font-weight: 600; display: inline-block; text-align: center;">{status}</span>'
+        return f'<span style="background-color: {bg_color}; color: {text_color}; {border} padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; display: inline-block; text-align: center;">{status}</span>'
 
     def highlight_status(val):
         bg_colors = {
@@ -231,23 +269,23 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
             save_todos(st.session_state.todos) 
             st.rerun()
 
-    col_edit, col_view = st.columns([1.2, 1])
+    # ปรับแต่งสำหรับมือถือ: ใช้ Tabs แทรก Columns
+    tab_edit, tab_view = st.tabs(["✏️ อัปเดตสถานะงาน", "📌 ภาพรวมรายเดือน"])
 
-    with col_edit:
-        st.markdown("### ✏️ อัปเดตสถานะงาน")
+    with tab_edit:
         if not st.session_state.todos.empty:
             styled_todos = st.session_state.todos.style.map(highlight_status, subset=['Status'])
             edited_df = st.data_editor(
                 styled_todos,
                 column_config={
                     "Status": st.column_config.SelectboxColumn(
-                        "📌 Status",
+                        "📌 สถานะ",
                         options=["ยังไม่ได้เริ่ม", "อยู่ระหว่างดำเนินการ", "หยุดไว้ชั่วคราว", "ไม่จำเป็น", "เสร็จแล้ว"],
                         required=True
                     ),
-                    "Task": st.column_config.TextColumn("📋 สิ่งที่ต้องทำ", disabled=True),
+                    "Task": st.column_config.TextColumn("📋 งาน", disabled=True),
                     "Deadline": st.column_config.DateColumn(
-                        "📅 กำหนดการ", 
+                        "📅 กำหนด", 
                         disabled=False, 
                         format="DD/MM/YYYY" 
                     )
@@ -264,8 +302,7 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
         else:
             st.info("ยังไม่มีรายการสิ่งที่ต้องทำ")
 
-    with col_view:
-        st.markdown("### 📌 ภาพรวมงานแยกตามเดือน")
+    with tab_view:
         if not st.session_state.todos.empty:
             view_df = st.session_state.todos.copy()
             view_df['SortDate'] = pd.to_datetime(view_df['Deadline'])
@@ -274,19 +311,20 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
             
             html_content = ""
             for month_group in view_df['MonthGroup'].unique():
-                html_content += f"<h4 style='color: #4b5563; border-bottom: 2px solid #e5e7eb; padding-bottom: 4px; margin-top: 20px;'>📅 {month_group}</h4>"
+                html_content += f"<h4 style='color: #4b5563; border-bottom: 2px solid #e5e7eb; padding-bottom: 4px; margin-top: 20px; font-size: 16px;'>📅 {month_group}</h4>"
                 month_tasks = view_df[view_df['MonthGroup'] == month_group]
                 
                 for _, row in month_tasks.iterrows():
                     badge = get_status_badge(row['Status'])
                     display_date = row['SortDate'].strftime("%d/%m/%Y")
                     
+                    # เพิ่ม flex-wrap และจัด layout ใหม่ให้ข้อความไม่ชนกันบนจอมือถือเล็กๆ
                     html_content += f"""<div style="padding: 12px; margin-bottom: 8px; border-radius: 8px; border: 1px solid #e5e7eb; background-color: #fafafa;">
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-<span style="font-weight: 600; font-size: 15px;">{row['Task']}</span>
+<div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px; margin-bottom: 6px;">
+<span style="font-weight: 600; font-size: 14px;">{row['Task']}</span>
 {badge}
 </div>
-<div style="color: #6b7280; font-size: 13px;">ครบกำหนด: {display_date}</div>
+<div style="color: #6b7280; font-size: 12px;">ครบกำหนด: {display_date}</div>
 </div>"""
             st.markdown(html_content, unsafe_allow_html=True)
         else:
