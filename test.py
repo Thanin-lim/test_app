@@ -81,6 +81,41 @@ if 'total_budget' not in st.session_state:
 if 'todos' not in st.session_state:
     st.session_state.todos = load_todos()
 
+# --- CALLBACK FUNCTIONS FOR LIVE UPDATE ---
+def on_expenses_edit():
+    edited_rows = st.session_state.expense_editor["edited_rows"]
+    deleted_rows = st.session_state.expense_editor["deleted_rows"]
+    added_rows = st.session_state.expense_editor["added_rows"]
+    
+    if edited_rows or deleted_rows or added_rows:
+        df = st.session_state.expenses.copy()
+        if deleted_rows:
+            df = df.drop(deleted_rows).reset_index(drop=True)
+        for row_idx, changes in edited_rows.items():
+            for col, val in changes.items():
+                df.at[int(row_idx), col] = val
+        for row in added_rows:
+            df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
+            
+        st.session_state.expenses = df
+        save_expenses(df)
+
+def on_todos_edit():
+    edited_rows = st.session_state.todo_editor["edited_rows"]
+    deleted_rows = st.session_state.todo_editor["deleted_rows"]
+    
+    if edited_rows or deleted_rows:
+        df = st.session_state.todos.copy()
+        if deleted_rows:
+            df = df.drop(deleted_rows).reset_index(drop=True)
+        for row_idx, changes in edited_rows.items():
+            for col, val in changes.items():
+                df.at[int(row_idx), col] = val
+                
+        df = df.dropna(subset=['Task'])
+        st.session_state.todos = df
+        save_todos(df)
+
 # --- 4. SIDEBAR NAVIGATION ---
 st.sidebar.title("📌 Navigation")
 page = st.sidebar.radio("เลือกหน้าต่างการทำงาน:", ["📊 Budget Tracker", "📝 สิ่งที่ต้องทำ (To-Do)"])
@@ -127,6 +162,7 @@ if page == "📊 Budget Tracker":
             st.session_state.expenses = pd.concat([st.session_state.expenses, new_row], ignore_index=True)
             save_expenses(st.session_state.expenses)
             st.success("เพิ่มค่าใช้จ่ายเรียบร้อยแล้ว!")
+            st.rerun()
 
     total_spent = st.session_state.expenses['Amount'].sum() if not st.session_state.expenses.empty else 0.0
     remaining_budget = st.session_state.total_budget - total_spent
@@ -164,12 +200,15 @@ if page == "📊 Budget Tracker":
             )
             fig.add_annotation(text=f"<b>฿ {total_spent:,.0f}</b><br>Total Cost", x=0.5, y=0.5, font_size=18, showarrow=False)
             fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5))
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         else:
             st.info("เพิ่มค่าใช้จ่ายที่แถบด้านข้างเพื่อดูแผนภูมิ")
 
     with tab_table:
         if not st.session_state.expenses.empty:
+            # สรุปจำนวนรายการให้เห็นเด่นชัดด้านบนตารางสำหรับเปิดบนโทรศัพท์
+            st.markdown(f"**📊 รายการค่าใช้จ่ายในระบบแต่ง (มีทั้งหมด {len(st.session_state.expenses)} รายการ):**")
+            
             def highlight_payment_status(val):
                 if val == 'ชำระเงินแล้ว':
                     return 'background-color: #dcfce7; color: #166534;'
@@ -179,7 +218,7 @@ if page == "📊 Budget Tracker":
 
             styled_expenses = st.session_state.expenses.style.map(highlight_payment_status, subset=['Status'])
             
-            edited_expenses = st.data_editor(
+            st.data_editor(
                 styled_expenses,
                 column_config={
                     "Vendor": st.column_config.TextColumn("ร้านค้า", width="medium"),
@@ -188,15 +227,12 @@ if page == "📊 Budget Tracker":
                     "Amount": st.column_config.NumberColumn("จำนวนเงิน", format="฿ %d", width="small"),
                     "Status": st.column_config.SelectboxColumn("📌 สถานะ", options=["ยังไม่ชำระเงิน", "ชำระเงินแล้ว"], required=True, width="medium")
                 },
-                hide_index=True,
-                use_container_width=True,
-                num_rows="dynamic"
+                hide_index=False,
+                width='stretch',
+                num_rows="dynamic",
+                key="expense_editor",
+                on_change=on_expenses_edit
             )
-            
-            if not edited_expenses.equals(st.session_state.expenses):
-                st.session_state.expenses = edited_expenses
-                save_expenses(st.session_state.expenses)
-                st.rerun()
         else:
             st.info("ยังไม่มีการบันทึกการชำระเงิน")
 
@@ -219,7 +255,7 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
         fig_todo = px.pie(status_counts, values='Count', names='Status', hole=0.6, color='Status', color_discrete_map=color_map)
         fig_todo.add_annotation(text=f"<b>{completed_tasks} / {total_tasks}</b><br>ทำเสร็จแล้ว", x=0.5, y=0.5, font_size=18, showarrow=False)
         fig_todo.update_layout(margin=dict(t=10, b=10, l=10, r=10), legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5)) 
-        st.plotly_chart(fig_todo, use_container_width=True)
+        st.plotly_chart(fig_todo, width='stretch')
         st.markdown("---")
     
     def get_status_badge(status):
@@ -260,9 +296,12 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
 
     with tab_edit:
         if not st.session_state.todos.empty:
+            # ระบุจำนวนงานคงค้างทั้งหมดให้ชัดเจนด้านบนตัวตารางงาน
+            st.markdown(f"**📋 รายการสิ่งที่ต้องทำในตาราง (มีทั้งหมด {len(st.session_state.todos)} รายการ):**")
+            
             styled_todos = st.session_state.todos.style.map(highlight_status, subset=['Status'])
             
-            edited_df = st.data_editor(
+            st.data_editor(
                 styled_todos,
                 column_config={
                     "Status": st.column_config.SelectboxColumn("📌 สถานะ", options=["ยังไม่ได้เริ่ม", "อยู่ระหว่างดำเนินการ", "หยุดไว้ชั่วคราว", "ไม่จำเป็น", "เสร็จแล้ว"], required=True, width="medium"),
@@ -271,22 +310,17 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
                     "Detail": st.column_config.TextColumn("🏠 รายละเอียด/Note (กดแก้ไขได้)", disabled=False, width="large")
                 },
                 hide_index=False, 
-                use_container_width=True,
-                num_rows="dynamic"
+                width='stretch',
+                num_rows="dynamic",
+                key="todo_editor",
+                on_change=on_todos_edit
             )
-            
-            if not edited_df.equals(st.session_state.todos):
-                edited_df = edited_df.dropna(subset=['Task'])
-                st.session_state.todos = edited_df
-                save_todos(st.session_state.todos) 
-                st.rerun() 
         else:
             st.info("ยังไม่มีรายการสิ่งที่ต้องทำ")
 
     with tab_view:
         if not st.session_state.todos.empty:
-            # --- อัปเดตตรงนี้: ใช้ st.columns แบ่งหน้าจอในแท็บภาพรวมเป็นฝั่งซ้ายและฝั่งขวา ---
-            col_left, col_right = st.columns([1.2, 1.0]) # ซ้ายภาพรวม ขวากล่องดรอปดาวน์ตรวจโน้ตใหญ่
+            col_left, col_right = st.columns([1.2, 1.0]) 
             
             with col_left:
                 st.markdown("### 📅 รายการงานรายเดือน")
