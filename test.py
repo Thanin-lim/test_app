@@ -30,7 +30,6 @@ def load_expenses():
             df = df.dropna(how="all")
             if 'Status' not in df.columns:
                 df['Status'] = 'ยังไม่ชำระเงิน'
-            # --- แก้ไขตรงนี้: บังคับให้คอลัมน์ Amount เป็นตัวเลขเสมอ ป้องกันค่า None ---
             if 'Amount' in df.columns:
                 df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0.0)
             else:
@@ -99,17 +98,13 @@ def on_expenses_edit():
         for row_idx, changes in edited_rows.items():
             for col, val in changes.items():
                 if col == 'Amount':
-                    try:
-                        val = float(val)
-                    except:
-                        val = 0.0
+                    try: val = float(val)
+                    except: val = 0.0
                 df.at[int(row_idx), col] = val
         for row in added_rows:
             if 'Amount' in row:
-                try:
-                    row['Amount'] = float(row['Amount'])
-                except:
-                    row['Amount'] = 0.0
+                try: row['Amount'] = float(row['Amount'])
+                except: row['Amount'] = 0.0
             df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
             
         st.session_state.expenses = df
@@ -184,8 +179,6 @@ if page == "📊 Budget Tracker":
 
     if not st.session_state.expenses.empty:
         paid_amount = st.session_state.expenses[st.session_state.expenses['Status'] == 'ชำระเงินแล้ว']['Amount'].sum()
-        unpaid_amount = st.session_state.expenses[st.session_state.expenses['Status'] == 'ยังไม่ชำเน็จเงิน']['Amount'].sum()
-        # ดึงยอดที่กรอกผิดหรือยังไม่ระบุจำนวนเงินด้วย
         unpaid_amount = total_spent - paid_amount
     else:
         paid_amount = 0.0
@@ -234,7 +227,6 @@ if page == "📊 Budget Tracker":
 
             styled_expenses = st.session_state.expenses.style.map(highlight_payment_status, subset=['Status'])
             
-            # --- แก้ไขตรงนี้: ตั้งค่า NumberColumn ให้ยอมรับตัวเลขชัดเจน และไม่ปิดช่องว่างเป็น None ---
             st.data_editor(
                 styled_expenses,
                 column_config={
@@ -378,13 +370,16 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
                         
                         st.info(f"""
                         **📋 ชื่องาน:** {task_info['Task']}  
-                        
                         **📅 วันครบกำหนด:** {task_info['Deadline'].strftime('%d/%m/%Y') if hasattr(task_info['Deadline'], 'strftime') else task_info['Deadline']}  
-                        
                         **📌 สถานะปัจจุบัน:** {task_info['Status']}  
-                        
                         **🏠 รายละเอียด/Note สำคัญ:** {detail_text}
                         """)
+                        
+                        # --- ฟีเจอร์อัปเดตใหม่ล่าสุด: ปุ่มกดเพิ่มรายชื่อแขก ---
+                        if "แขก" in task_info['Task'] or "รายชื่อ" in task_info['Task']:
+                            st.success("💡 พบงานเกี่ยวกับรายชื่อแขก! คุณสามารถกดปุ่มด้านล่างเพื่อเปิดหน้าจัดการรายชื่อได้ทันที:")
+                            # สามารถนำ URL หน้า Google Sheets หรือฟอร์มกรอกชื่อแขกของคุณมาใส่แทนที่ลิ้งก์ข้างล่างนี้ได้เลยครับ
+                            st.link_button("➕ กดตรงนี้เพื่อไปเพิ่มชื่อแขก", "https://docs.google.com", width='stretch')
         else:
             st.write("-")
 
