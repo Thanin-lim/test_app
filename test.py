@@ -241,7 +241,7 @@ if page == "📊 Budget Tracker":
                     "Vendor": st.column_config.TextColumn("ร้านค้า", width="medium"),
                     "Category": None,  
                     "Due Date": None,  
-                    "Amount": st.column_config.NumberColumn("จำนวนเงิน (บาท)", format="฿ %d", min_value=0, default=0, required=True, width="medium"),
+                    "Amount": st.column_config.NumberColumn("จำนวนเงิน (บาท)", format="%d", min_value=0, default=0, required=True, width="medium"),
                     "Status": st.column_config.SelectboxColumn("📌 สถานะ", options=["ยังไม่ชำระเงิน", "ชำระเงินแล้ว"], required=True, width="medium")
                 },
                 hide_index=False,
