@@ -69,7 +69,6 @@ def load_guests():
         df = conn.read(worksheet="Guests", ttl=0)
         if not df.empty:
             df = df.dropna(subset=['Guest Name'])
-            # บังคับให้ทุกคอลัมน์ในตารางแขกเป็นประเภทตัวหนังสือ เพื่อป้องกันค่าว่างในชีตเอ๋อเป็น FLOAT
             for col in df.columns:
                 df[col] = df[col].astype(str).replace(['nan', 'None', '<NA>'], '')
             return df
@@ -103,6 +102,10 @@ if 'todos' not in st.session_state:
 
 if 'guests' not in st.session_state:
     st.session_state.guests = load_guests()
+
+# สร้าง State สำหรับเก็บหน้าปัจจุบัน (เริ่มต้นที่หน้าแรก)
+if 'page' not in st.session_state:
+    st.session_state.page = "🏠 หน้าแรก"
 
 # --- CALLBACK FUNCTIONS FOR LIVE UPDATE ---
 def on_expenses_edit():
@@ -161,15 +164,60 @@ def on_guests_edit():
         st.session_state.guests = df
         save_guests(df)
 
-# --- 4. SIDEBAR NAVIGATION ---
-st.sidebar.title("📌 Navigation")
-page = st.sidebar.radio("เลือกหน้าต่างการทำงาน:", ["📊 Budget Tracker", "📝 สิ่งที่ต้องทำ (To-Do)", "👥 รายชื่อแขก (Guest List)"])
-st.sidebar.markdown("---")
+
+# ==========================================
+# 🏠 หน้าแรก: เมนูเลือกหมวดหมู่หลัก (ไม่มี NAV ด้านข้าง)
+# ==========================================
+if st.session_state.page == "🏠 หน้าแรก":
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #db2777;'>💍 Wedding Planner Dashboard</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #4b5563; font-size: 18px;'>ยินดีต้อนรับสู่ระบบจัดการงานแต่งงาน กรุณาเลือกหมวดหมู่ที่ต้องการทำงานด้านล่างนี้ค่ะ</p>", unsafe_allow_html=True)
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("""
+        <div style="background-color: #f0fdf4; padding: 24px; border-radius: 12px; border: 1px solid #bbf7d0; text-align: center; min-height: 200px;">
+            <h2 style="color: #16a34a; margin-top: 0;">📊 Budget Tracker</h2>
+            <p style="color: #4b5563;">จัดการงบประมาณ บันทึกค่าใช้จ่าย ตรวจสอบสถานะการจ่ายเงินร้านค้า และดูสรุปแผนภูมิวงกลม</p>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("💰 เปิดระบบงบประมาณ", use_container_width=True, type="primary"):
+            st.session_state.page = "📊 Budget Tracker"
+            st.rerun()
+            
+    with col2:
+        st.markdown("""
+        <div style="background-color: #fffbeb; padding: 24px; border-radius: 12px; border: 1px solid #fef08a; text-align: center; min-height: 200px;">
+            <h2 style="color: #d97706; margin-top: 0;">📝 To-Do List</h2>
+            <p style="color: #4b5563;">ติดตามและอัปเดตสิ่งสำคัญที่ต้องทำ จัดกลุ่มกำหนดการแยกรายเดือนเพื่อไม่ให้พลาดทุกดีเทลงาน</p>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("✏️ เปิดรายการสิ่งที่ต้องทำ", use_container_width=True, type="primary"):
+            st.session_state.page = "📝 สิ่งที่ต้องทำ (To-Do)"
+            st.rerun()
+            
+    with col3:
+        st.markdown("""
+        <div style="background-color: #fdf2f8; padding: 24px; border-radius: 12px; border: 1px solid #fbcfe8; text-align: center; min-height: 200px;">
+            <h2 style="color: #db2777; margin-top: 0;">👥 Guest List</h2>
+            <p style="color: #4b5563;">ระบบจัดการรายชื่อแขก แยกกลุ่มญาติ/เพื่อน และแยกฝั่งเจ้าสาว-เจ้าบ่าว พร้อมระบบกรอกชื่อในหน้าเดียว</p>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("🤝 เปิดระบบจัดการแขก", use_container_width=True, type="primary"):
+            st.session_state.page = "👥 รายชื่อแขก (Guest List)"
+            st.rerun()
+
 
 # ==========================================
 # PAGE 1: BUDGET TRACKER
 # ==========================================
-if page == "📊 Budget Tracker":
+elif st.session_state.page == "📊 Budget Tracker":
+    if st.button("⬅️ กลับหน้าหลัก (เมนูเลือกหมวดหมู่)", type="secondary"):
+        st.session_state.page = "🏠 หน้าแรก"
+        st.rerun()
+        
     st.title("💍 Wedding Budget Dashboard")
     
     st.sidebar.header("⚙️ ตั้งค่างบประมาณ")
@@ -200,7 +248,7 @@ if page == "📊 Budget Tracker":
     remaining_budget = st.session_state.total_budget - total_spent
 
     if not st.session_state.expenses.empty:
-        paid_amount = st.session_state.expenses[st.session_state.expenses['Status'] == 'ชำrateเงินแล้ว']['Amount'].sum() if 'ชำระเงินแล้ว' in st.session_state.expenses['Status'].values else st.session_state.expenses[st.session_state.expenses['Status'] == 'ชำระเงินแล้ว']['Amount'].sum()
+        paid_amount = st.session_state.expenses[st.session_state.expenses['Status'] == 'ชำระเงินแล้ว']['Amount'].sum()
         unpaid_amount = total_spent - paid_amount
     else:
         paid_amount = 0.0
@@ -250,7 +298,11 @@ if page == "📊 Budget Tracker":
 # ==========================================
 # PAGE 2: TO-DO LIST
 # ==========================================
-elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
+elif st.session_state.page == "📝 สิ่งที่ต้องทำ (To-Do)":
+    if st.button("⬅️ กลับหน้าหลัก (เมนูเลือกหมวดหมู่)", type="secondary"):
+        st.session_state.page = "🏠 หน้าแรก"
+        st.rerun()
+        
     st.title("📝 เตรียมสิ่งที่ต้องทำ (To-Do List)")
     
     if not st.session_state.todos.empty:
@@ -283,7 +335,6 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
         if not st.session_state.todos.empty:
             st.markdown(f"**📋 รายการสิ่งที่ต้องทำในตาราง (มีทั้งหมด {len(st.session_state.todos)} รายการ):**")
             
-            # แก้ไขแก้ปีกกาซ้อน f-string เรียบร้อยแล้ว
             def highlight_status(val):
                 colors = {
                     'ยังไม่ได้เริ่ม': '#f3f4f6', 
@@ -347,28 +398,14 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
 # ==========================================
 # PAGE 3: GUEST LIST (ระบบจัดการรายชื่อแขก)
 # ==========================================
-elif page == "👥 รายชื่อแขก (Guest List)":
+elif st.session_state.page == "👥 รายชื่อแขก (Guest List)":
+    if st.button("⬅️ กลับหน้าหลัก (เมนูเลือกหมวดหมู่)", type="secondary"):
+        st.session_state.page = "🏠 หน้าแรก"
+        st.rerun()
+        
     st.title("👥 ระบบจัดการและเพิ่มรายชื่อแขก")
     st.write("บันทึกรายชื่อแขก แยกฝั่งเจ้าสาว/เจ้าบ่าว และส่งข้อมูลไปเก็บที่ Google Sheets")
 
-    # ส่วนฟอร์มเพิ่มรายชื่อแขกด้านข้าง (Sidebar)
-    st.sidebar.header("➕ เพิ่มชื่อแขกใหม่")
-    with st.sidebar.form("add_guest_form", clear_on_submit=True):
-        guest_name = st.text_input("ชื่อ-นามสกุล ของแขก")
-        guest_side = st.selectbox("แขกฝั่งไหน?", ["ฝั่งเจ้าสาว", "ฝั่งเจ้าบ่าว", "แขกส่วนกลาง"])
-        guest_group = st.selectbox("กลุ่มบุคคล", ["ญาติผู้ใหญ่", "เพื่อนสนิท", "เพื่อนที่ทำงาน", "เพื่อนสมัยเรียน", "อื่นๆ"])
-        guest_note = st.text_input("หมายเหตุเพิ่มเติม (เช่น มา 2 ท่าน, ทานมังสวิรัติ)")
-        
-        add_guest_btn = st.form_submit_button("💾 กดบันทึกรายชื่อแขก")
-        
-        if add_guest_btn and guest_name:
-            new_guest = pd.DataFrame([{'Guest Name': guest_name, 'Side': guest_side, 'Group': guest_group, 'Note': guest_note}])
-            st.session_state.guests = pd.concat([st.session_state.guests, new_guest], ignore_index=True)
-            save_guests(st.session_state.guests)
-            st.success(f"บันทึกคุณ '{guest_name}' ลงระบบเรียบร้อย!")
-            st.rerun()
-
-    # --- ฟีเจอร์แสดงจำนวนแขกทั้งหมดและแยกฝั่งอย่างชัดเจน ---
     total_guests = len(st.session_state.guests)
     bride_guests = len(st.session_state.guests[st.session_state.guests['Side'] == 'ฝั่งเจ้าสาว'])
     groom_guests = len(st.session_state.guests[st.session_state.guests['Side'] == 'ฝั่งเจ้าบ่าว'])
@@ -384,8 +421,28 @@ elif page == "👥 รายชื่อแขก (Guest List)":
     tab_guest_edit, tab_guest_view = st.tabs(["✏️ เพิ่ม/ลบ/แก้ไข รายชื่อทั้งหมด", "🔍 ค้นหาและดูการ์ดชื่อแขก"])
 
     with tab_guest_edit:
+        st.markdown("### ➕ เพิ่มชื่อแขกใหม่")
+        with st.form("add_guest_form_main", clear_on_submit=True):
+            f_col1, f_col2, f_col3 = st.columns([2, 1, 1])
+            guest_name = f_col1.text_input("ชื่อ-นามสกุล ของแขก", placeholder="พิมพ์ชื่อตรงนี้...")
+            guest_side = f_col2.selectbox("แขกฝั่งไหน?", ["ฝั่งเจ้าสาว", "ฝั่งเจ้าบ่าว", "แขกส่วนกลาง"])
+            guest_group = f_col3.selectbox("กลุ่มบุคคล", ["ญาติผู้ใหญ่", "เพื่อนสนิท", "เพื่อนที่ทำงาน", "เพื่อนสมัยเรียน", "อื่นๆ"])
+            
+            guest_note = st.text_input("หมายเหตุเพิ่มเติม (เช่น มา 2 ท่าน, ทานมังสวิรัติ)", placeholder="ระบุโน้ตเพิ่มเติม (ถ้ามี)")
+            
+            add_guest_btn = st.form_submit_button("💾 กดบันทึกรายชื่อแขก")
+            
+            if add_guest_btn and guest_name:
+                new_guest = pd.DataFrame([{'Guest Name': guest_name, 'Side': guest_side, 'Group': guest_group, 'Note': guest_note}])
+                st.session_state.guests = pd.concat([st.session_state.guests, new_guest], ignore_index=True)
+                save_guests(st.session_state.guests)
+                st.success(f"บันทึกคุณ '{guest_name}' ลงระบบเรียบร้อย!")
+                st.rerun()
+
+        st.markdown("---")
+        
         if not st.session_state.guests.empty:
-            st.markdown(f"**📋 รายชื่อแขกทั้งหมดในระบบแต่ง (กดปุ่มถังขยะเพื่อลบ หรือแตะเพื่อแก้ไขข้อความได้):**")
+            st.markdown(f"**📋 รายชื่อแขกทั้งหมดในระบบ (กดปุ่มถังขยะเพื่อลบ หรือแตะในตารางเพื่อแก้ไขได้ทันที):**")
             st.data_editor(
                 st.session_state.guests,
                 column_config={
@@ -399,7 +456,6 @@ elif page == "👥 รายชื่อแขก (Guest List)":
         else:
             st.info("ยังไม่มีการบันทึกรายชื่อแขก")
 
-    # --- ช่องสำหรับดูและค้นหาชื่อแขกแบบการ์ด Responsive ---
     with tab_guest_view:
         if not st.session_state.guests.empty:
             st.markdown("### 🔍 ค้นหาและดูรายละเอียดแขก")
