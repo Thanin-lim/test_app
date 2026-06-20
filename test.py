@@ -2,37 +2,50 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import date
-import os
+from streamlit_gsheets import GSheetsConnection
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(page_title="Wedding Planner Dashboard", page_icon="💍", layout="wide")
 
-# ==========================================
-# ฟังก์ชันสำหรับ Save / Load ข้อมูลลงเครื่อง
-# ==========================================
+# --- 2. GOOGLE SHEETS CONNECTION ---
+# สร้างตัวเชื่อมต่อกับ Google Sheets
+conn = st.connection("gsheets", type=GSheetsConnection)
+
 def load_budget():
-    if os.path.exists("wedding_budget.txt"):
-        with open("wedding_budget.txt", "r") as f:
-            return float(f.read())
+    try:
+        df = conn.read(worksheet="Budget", usecols=[0], ttl=0)
+        if not df.empty and pd.notna(df.iloc[0, 0]):
+            return float(df.iloc[0, 0])
+    except:
+        pass
     return 190000.00 
 
 def save_budget(amount):
-    with open("wedding_budget.txt", "w") as f:
-        f.write(str(amount))
+    df = pd.DataFrame({"Total Budget": [amount]})
+    conn.update(worksheet="Budget", data=df)
 
 def load_expenses():
-    if os.path.exists("wedding_expenses.csv"):
-        return pd.read_csv("wedding_expenses.csv")
+    try:
+        df = conn.read(worksheet="Expenses", ttl=0)
+        if not df.empty:
+            return df.dropna(how="all")
+    except:
+        pass
     return pd.DataFrame(columns=['Vendor', 'Category', 'Amount', 'Due Date'])
 
 def save_expenses(df):
-    df.to_csv("wedding_expenses.csv", index=False)
+    conn.update(worksheet="Expenses", data=df)
 
 def load_todos():
-    if os.path.exists("wedding_todos.csv"):
-        df = pd.read_csv("wedding_todos.csv")
-        df['Deadline'] = pd.to_datetime(df['Deadline']).dt.date 
-        return df
+    try:
+        df = conn.read(worksheet="Todos", ttl=0)
+        if not df.empty:
+            df = df.dropna(how="all")
+            if not df.empty and 'Deadline' in df.columns:
+                df['Deadline'] = pd.to_datetime(df['Deadline']).dt.date 
+                return df
+    except:
+        pass
     return pd.DataFrame({
         'Status': ['ยังไม่ได้เริ่ม', 'ยังไม่ได้เริ่ม'],
         'Task': ['จองสถานที่จัดงาน', 'ลิสต์รายชื่อแขก'],
@@ -40,7 +53,7 @@ def load_todos():
     })
 
 def save_todos(df):
-    df.to_csv("wedding_todos.csv", index=False)
+    conn.update(worksheet="Todos", data=df)
 
 def get_thai_month_year(date_val):
     try:
@@ -53,7 +66,7 @@ def get_thai_month_year(date_val):
     except:
         return "ไม่ระบุ"
 
-# --- 2. INITIALIZE SESSION STATE ---
+# --- 3. INITIALIZE SESSION STATE ---
 if 'expenses' not in st.session_state:
     st.session_state.expenses = load_expenses()
 
@@ -63,7 +76,7 @@ if 'total_budget' not in st.session_state:
 if 'todos' not in st.session_state:
     st.session_state.todos = load_todos()
 
-# --- 3. SIDEBAR NAVIGATION ---
+# --- 4. SIDEBAR NAVIGATION ---
 st.sidebar.title("📌 Navigation")
 page = st.sidebar.radio("เลือกหน้าต่างการทำงาน:", ["📊 Budget Tracker", "📝 สิ่งที่ต้องทำ (To-Do)"])
 st.sidebar.markdown("---")
@@ -148,24 +161,19 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
     st.title("📝 เตรียมสิ่งที่ต้องทำ (To-Do List)")
     st.write("บันทึกและติดตามความคืบหน้าของงานที่ต้องเตรียม แยกตามเดือน")
     
-    # ------------------------------------------
-    # NEW: เพิ่มส่วน Pie Chart สรุปสถานะงานไว้ด้านบน
-    # ------------------------------------------
     if not st.session_state.todos.empty:
-        # นับจำนวนสถานะ
         status_counts = st.session_state.todos['Status'].value_counts().reset_index()
         status_counts.columns = ['Status', 'Count']
         
         total_tasks = len(st.session_state.todos)
         completed_tasks = len(st.session_state.todos[st.session_state.todos['Status'] == 'เสร็จแล้ว'])
         
-        # กำหนดสีให้ตรงกับ Badge เพื่อความสวยงามและเข้าใจง่าย
         color_map = {
-            'ยังไม่ได้เริ่ม': '#9ca3af',      # เทา
-            'อยู่ระหว่างดำเนินการ': '#fbbf24', # เหลือง
-            'หยุดไว้ชั่วคราว': '#fb923c',     # ส้ม
-            'ไม่จำเป็น': '#f87171',         # แดง
-            'เสร็จแล้ว': '#4ade80'          # เขียว
+            'ยังไม่ได้เริ่ม': '#9ca3af',
+            'อยู่ระหว่างดำเนินการ': '#fbbf24',
+            'หยุดไว้ชั่วคราว': '#fb923c',
+            'ไม่จำเป็น': '#f87171',
+            'เสร็จแล้ว': '#4ade80'
         }
         
         fig_todo = px.pie(
@@ -177,16 +185,14 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
             color_discrete_map=color_map
         )
         fig_todo.add_annotation(text=f"<b>{completed_tasks} / {total_tasks}</b><br>ทำเสร็จแล้ว", x=0.5, y=0.5, font_size=20, showarrow=False)
-        fig_todo.update_layout(margin=dict(t=0, b=0, l=0, r=0)) # ลดขอบกราฟ
+        fig_todo.update_layout(margin=dict(t=0, b=0, l=0, r=0)) 
         
-        # แบ่งคอลัมน์เพื่อให้กราฟอยู่ตรงกลางและขนาดไม่ใหญ่จนเกินไป
         col_space1, col_pie, col_space2 = st.columns([1, 1.5, 1])
         with col_pie:
             st.plotly_chart(fig_todo, use_container_width=True)
             
         st.markdown("---")
     
-    # CSS Badge
     def get_status_badge(status):
         colors = {
             'ยังไม่ได้เริ่ม': ('#f3f4f6', '#374151', 'border: 1px solid #d1d5db;'),
@@ -223,7 +229,7 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
             }])
             st.session_state.todos = pd.concat([st.session_state.todos, new_task], ignore_index=True)
             save_todos(st.session_state.todos) 
-            st.rerun() # รีเฟรชหน้าเพื่อให้กราฟด้านบนอัปเดตทันที
+            st.rerun()
 
     col_edit, col_view = st.columns([1.2, 1])
 
@@ -253,7 +259,7 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
             if not edited_df.equals(st.session_state.todos):
                 st.session_state.todos = edited_df
                 save_todos(st.session_state.todos) 
-                st.rerun() # รีเฟรชเพื่ออัปเดตกราฟโดนัท
+                st.rerun() 
             
         else:
             st.info("ยังไม่มีรายการสิ่งที่ต้องทำ")
