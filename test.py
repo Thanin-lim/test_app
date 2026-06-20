@@ -9,7 +9,7 @@ import hashlib
 st.set_page_config(page_title="Wedding Planner Dashboard", page_icon="💍", layout="wide")
 
 # --- 2. AUTHENTICATION (SECURITY) ---
-APP_PASSWORD_HASH = hashlib.sha256("mooko".encode('utf-8')).hexdigest()
+APP_PASSWORD_HASH = hashlib.sha256("imukko".encode('utf-8')).hexdigest()
 
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
@@ -376,7 +376,7 @@ elif st.session_state.page == "👥 รายชื่อแขก (Guest List)"
         if not st.session_state.guests.empty:
             confirmed_guests = st.session_state.guests[st.session_state.guests['RSVP'] == 'ยืนยันเข้าร่วม']
             if not confirmed_guests.empty:
-                st.info("💡 ทริค: จัดกลุ่มแขกด้วยการพิมพ์ชื่อโต๊ะลงในคอลัมน์ Table เช่น 'VIP-1', 'Friend-A'")
+                st.info("จัดกลุ่มแขกด้วยการพิมพ์ชื่อโต๊ะลงในคอลัมน์ Table ")
                 # กรองเฉพาะ Column ที่จำเป็นสำหรับการจัดโต๊ะ
                 seat_df = confirmed_guests[['Guest Name', 'Group', 'Side', 'Table', 'Note']]
                 st.dataframe(seat_df, width=1000)
