@@ -7,53 +7,83 @@ from streamlit_gsheets import GSheetsConnection
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(page_title="Wedding Planner Dashboard", page_icon="💍", layout="wide")
 
-# --- 2. GOOGLE SHEETS CONNECTION ---
+# --- 2. AUTHENTICATION (SECURITY) ---
+# แนะนำให้เปลี่ยนรหัสผ่าน หรือย้ายไปตั้งค่าใน .streamlit/secrets.toml สำหรับการ Deploy จริง
+APP_PASSWORD = "wedding2026"
+
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #db2777;'>💍 Wedding Planner Dashboard</h1>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        st.info("กรุณาใส่รหัสผ่านเพื่อเข้าสู่ระบบจัดการงานแต่งงาน")
+        pwd = st.text_input("Password:", type="password")
+        if st.button("เข้าสู่ระบบ", type="primary", use_container_width=True):
+            if pwd == APP_PASSWORD:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("❌ รหัสผ่านไม่ถูกต้อง")
+    st.stop() # หยุดการทำงานชั่วคราวถ้ายังไม่ Login
+
+# --- 3. GOOGLE SHEETS CONNECTION & DATA PIPELINE ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_budget():
     try:
-        df = conn.read(worksheet="Budget", usecols=[0], ttl=0)
+        # ปรับ ttl=10 เพื่อลดคอขวดของการเรียก API
+        df = conn.read(worksheet="Budget", usecols=[0], ttl=10)
         if not df.empty and pd.notna(df.iloc[0, 0]):
             return float(df.iloc[0, 0])
-    except:
-        pass
+    except Exception as e:
+        st.warning(f"⚠️ ไม่สามารถโหลดข้อมูลงบประมาณได้: {e}")
     return 190000.00 
 
 def save_budget(amount):
-    df = pd.DataFrame({"Total Budget": [amount]})
-    conn.update(worksheet="Budget", data=df)
+    try:
+        df = pd.DataFrame({"Total Budget": [amount]})
+        conn.update(worksheet="Budget", data=df)
+    except Exception as e:
+        st.error(f"❌ บันทึกงบประมาณล้มเหลว: {e}")
 
 def load_expenses():
     try:
-        df = conn.read(worksheet="Expenses", ttl=0)
+        df = conn.read(worksheet="Expenses", ttl=10)
         if not df.empty:
             df = df.dropna(how="all")
-            if 'Status' not in df.columns:
-                df['Status'] = 'ยังไม่ชำระเงิน'
+            # จัดการ Default Values สำหรับ Schema Evolution
+            if 'Status' not in df.columns: df['Status'] = 'ยังไม่ชำระเงิน'
+            if 'Contact' not in df.columns: df['Contact'] = '' # ฟิลด์ใหม่
             if 'Amount' in df.columns:
                 df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0.0)
             else:
                 df['Amount'] = 0.0
             return df
-    except:
-        pass
-    return pd.DataFrame(columns=['Vendor', 'Category', 'Amount', 'Due Date', 'Status'])
+    except Exception as e:
+        st.warning(f"⚠️ ไม่สามารถโหลดข้อมูลค่าใช้จ่ายได้: {e}")
+    return pd.DataFrame(columns=['Vendor', 'Category', 'Amount', 'Due Date', 'Status', 'Contact'])
 
 def save_expenses(df):
-    conn.update(worksheet="Expenses", data=df)
+    try:
+        conn.update(worksheet="Expenses", data=df)
+    except Exception as e:
+        st.error(f"❌ บันทึกค่าใช้จ่ายล้มเหลว: {e}")
 
 def load_todos():
     try:
-        df = conn.read(worksheet="Todos", ttl=0)
+        df = conn.read(worksheet="Todos", ttl=10)
         if not df.empty:
             df = df.dropna(how="all")
-            if 'Detail' not in df.columns:
-                df['Detail'] = ''
+            if 'Detail' not in df.columns: df['Detail'] = ''
             if not df.empty and 'Deadline' in df.columns:
                 df['Deadline'] = pd.to_datetime(df['Deadline']).dt.date 
                 return df
-    except:
-        pass
+    except Exception as e:
+        st.warning(f"⚠️ ไม่สามารถโหลดข้อมูล To-Do ได้: {e}")
     return pd.DataFrame({
         'Status': ['ยังไม่ได้เริ่ม', 'ยังไม่ได้เริ่ม'],
         'Task': ['จองสถานที่จัดงาน', 'ลิสต์รายชื่อแขก'],
@@ -62,22 +92,30 @@ def load_todos():
     })
 
 def save_todos(df):
-    conn.update(worksheet="Todos", data=df)
+    try:
+        conn.update(worksheet="Todos", data=df)
+    except Exception as e:
+        st.error(f"❌ บันทึก To-Do ล้มเหลว: {e}")
 
 def load_guests():
     try:
-        df = conn.read(worksheet="Guests", ttl=0)
+        df = conn.read(worksheet="Guests", ttl=10)
         if not df.empty:
             df = df.dropna(subset=['Guest Name'])
+            # จัดการ Default Values
+            if 'RSVP' not in df.columns: df['RSVP'] = 'รอการตอบรับ' # ฟิลด์ใหม่
             for col in df.columns:
                 df[col] = df[col].astype(str).replace(['nan', 'None', '<NA>'], '')
             return df
-    except:
-        pass
-    return pd.DataFrame(columns=['Guest Name', 'Side', 'Group', 'Note'])
+    except Exception as e:
+        st.warning(f"⚠️ ไม่สามารถโหลดข้อมูลรายชื่อแขกได้: {e}")
+    return pd.DataFrame(columns=['Guest Name', 'Side', 'Group', 'Note', 'RSVP'])
 
 def save_guests(df):
-    conn.update(worksheet="Guests", data=df)
+    try:
+        conn.update(worksheet="Guests", data=df)
+    except Exception as e:
+        st.error(f"❌ บันทึกรายชื่อแขกล้มเหลว: {e}")
 
 def get_thai_month_year(date_val):
     try:
@@ -90,28 +128,18 @@ def get_thai_month_year(date_val):
     except:
         return "ไม่ระบุ"
 
-# --- 3. INITIALIZE SESSION STATE ---
-if 'expenses' not in st.session_state:
-    st.session_state.expenses = load_expenses()
+# --- 4. INITIALIZE SESSION STATE ---
+if 'expenses' not in st.session_state: st.session_state.expenses = load_expenses()
+if 'total_budget' not in st.session_state: st.session_state.total_budget = load_budget()
+if 'todos' not in st.session_state: st.session_state.todos = load_todos()
+if 'guests' not in st.session_state: st.session_state.guests = load_guests()
+if 'page' not in st.session_state: st.session_state.page = "🏠 หน้าแรก"
 
-if 'total_budget' not in st.session_state:
-    st.session_state.total_budget = load_budget()
-
-if 'todos' not in st.session_state:
-    st.session_state.todos = load_todos()
-
-if 'guests' not in st.session_state:
-    st.session_state.guests = load_guests()
-
-# เริ่มต้นแอปที่หน้าหลักเสมอ
-if 'page' not in st.session_state:
-    st.session_state.page = "🏠 หน้าแรก"
-
-# --- CALLBACK FUNCTIONS FOR LIVE UPDATE ---
+# --- CALLBACK FUNCTIONS ---
 def on_expenses_edit():
-    edited_rows = st.session_state.expense_editor["edited_rows"]
-    deleted_rows = st.session_state.expense_editor["deleted_rows"]
-    added_rows = st.session_state.expense_editor["added_rows"]
+    edited_rows = st.session_state.expense_editor.get("edited_rows", {})
+    deleted_rows = st.session_state.expense_editor.get("deleted_rows", [])
+    added_rows = st.session_state.expense_editor.get("added_rows", [])
     
     if edited_rows or deleted_rows or added_rows:
         df = st.session_state.expenses.copy()
@@ -133,8 +161,8 @@ def on_expenses_edit():
         save_expenses(df)
 
 def on_todos_edit():
-    edited_rows = st.session_state.todo_editor["edited_rows"]
-    deleted_rows = st.session_state.todo_editor["deleted_rows"]
+    edited_rows = st.session_state.todo_editor.get("edited_rows", {})
+    deleted_rows = st.session_state.todo_editor.get("deleted_rows", [])
     
     if edited_rows or deleted_rows:
         df = st.session_state.todos.copy()
@@ -149,8 +177,8 @@ def on_todos_edit():
         save_todos(df)
 
 def on_guests_edit():
-    edited_rows = st.session_state.guest_editor["edited_rows"]
-    deleted_rows = st.session_state.guest_editor["deleted_rows"]
+    edited_rows = st.session_state.guest_editor.get("edited_rows", {})
+    deleted_rows = st.session_state.guest_editor.get("deleted_rows", [])
     
     if edited_rows or deleted_rows:
         df = st.session_state.guests.copy()
@@ -166,7 +194,7 @@ def on_guests_edit():
 
 
 # ==========================================
-# 🏠 หน้าแรก: เลือกหมวดหมู่ (ไม่มี NAV BAR)
+# 🏠 หน้าแรก: เลือกหมวดหมู่ 
 # ==========================================
 if st.session_state.page == "🏠 หน้าแรก":
     st.markdown("<br>", unsafe_allow_html=True)
@@ -180,7 +208,7 @@ if st.session_state.page == "🏠 หน้าแรก":
         st.markdown("""
         <div style="background-color: #f0fdf4; padding: 24px; border-radius: 12px; border: 1px solid #bbf7d0; text-align: center; min-height: 200px;">
             <h2 style="color: #16a34a; margin-top: 0;">📊 Budget Tracker</h2>
-            <p style="color: #4b5563;">จัดการงบประมาณ บันทึกค่าใช้จ่าย ตรวจสอบสถานะการจ่ายเงินร้านค้า และดูสรุปแผนภูมิวงกลม</p>
+            <p style="color: #4b5563;">จัดการงบประมาณ บันทึกค่าใช้จ่าย ตรวจสอบสถานะการจ่ายเงินร้านค้า และช่องทางติดต่อ</p>
         </div>
         """, unsafe_allow_html=True)
         if st.button("💰 เปิดระบบงบประมาณ", use_container_width=True, type="primary"):
@@ -202,7 +230,7 @@ if st.session_state.page == "🏠 หน้าแรก":
         st.markdown("""
         <div style="background-color: #fdf2f8; padding: 24px; border-radius: 12px; border: 1px solid #fbcfe8; text-align: center; min-height: 200px;">
             <h2 style="color: #db2777; margin-top: 0;">👥 Guest List</h2>
-            <p style="color: #4b5563;">ระบบจัดการรายชื่อแขก แยกกลุ่มญาติ/เพื่อน และแยกฝั่งเจ้าสาว-เจ้าบ่าว พร้อมระบบกรอกชื่อในหน้าเดียว</p>
+            <p style="color: #4b5563;">จัดการรายชื่อแขก แยกกลุ่มญาติ/เพื่อน และติดตามสถานะการตอบรับ (RSVP)</p>
         </div>
         """, unsafe_allow_html=True)
         if st.button("🤝 เปิดระบบจัดการแขก", use_container_width=True, type="primary"):
@@ -211,17 +239,16 @@ if st.session_state.page == "🏠 หน้าแรก":
 
 
 # ==========================================
-# PAGE 1: BUDGET TRACKER (ไม่มี NAV BAR)
+# PAGE 1: BUDGET TRACKER 
 # ==========================================
 elif st.session_state.page == "📊 Budget Tracker":
-    if st.button("⬅️ กลับหน้าหลัก (เมนูเลือกหมวดหมู่)", type="secondary"):
+    if st.button("⬅️ กลับหน้าหลัก", type="secondary"):
         st.session_state.page = "🏠 หน้าแรก"
         st.rerun()
         
     st.title("💍 Wedding Budget Dashboard")
     st.markdown("---")
 
-    # ย้ายแบบฟอร์มการตั้งค่าและเพิ่มค่าใช้จ่ายเข้าหน้าหลักโดยใช้คอลัมน์แทน Sidebar
     set_col, add_col = st.columns(2)
     
     with set_col:
@@ -242,11 +269,14 @@ elif st.session_state.page == "📊 Budget Tracker":
             amount = v_col3.number_input("จำนวนเงิน (บาท)", min_value=0.0, step=1000.0)
             due_date = v_col4.date_input("กำหนดชำระเงิน", min_value=date.today())
             
-            payment_status = st.selectbox("สถานะการจ่ายเงิน", ["ยังไม่ชำระเงิน", "ชำระเงินแล้ว"])
+            v_col5, v_col6 = st.columns(2)
+            contact_info = v_col5.text_input("ช่องทางติดต่อ (เบอร์/Line)")
+            payment_status = v_col6.selectbox("สถานะการจ่ายเงิน", ["ยังไม่ชำระเงิน", "ชำระเงินแล้ว"])
+            
             submit_button = st.form_submit_button("💾 เพิ่มลงในบัญชี")
             
             if submit_button and vendor and amount > 0:
-                new_row = pd.DataFrame([{'Vendor': vendor, 'Category': category, 'Amount': float(amount), 'Due Date': due_date.strftime("%d %B %Y"), 'Status': payment_status}])
+                new_row = pd.DataFrame([{'Vendor': vendor, 'Category': category, 'Amount': float(amount), 'Due Date': due_date.strftime("%d %B %Y"), 'Status': payment_status, 'Contact': contact_info}])
                 st.session_state.expenses = pd.concat([st.session_state.expenses, new_row], ignore_index=True)
                 save_expenses(st.session_state.expenses)
                 st.success("เพิ่มค่าใช้จ่ายเรียบร้อยแล้ว!")
@@ -254,7 +284,6 @@ elif st.session_state.page == "📊 Budget Tracker":
 
     st.markdown("---")
     
-    # คำนวณสรุปเงินยอดต่าง ๆ
     total_spent = st.session_state.expenses['Amount'].sum() if not st.session_state.expenses.empty else 0.0
     remaining_budget = st.session_state.total_budget - total_spent
 
@@ -262,8 +291,7 @@ elif st.session_state.page == "📊 Budget Tracker":
         paid_amount = st.session_state.expenses[st.session_state.expenses['Status'] == 'ชำระเงินแล้ว']['Amount'].sum()
         unpaid_amount = total_spent - paid_amount
     else:
-        paid_amount = 0.0
-        unpaid_amount = 0.0
+        paid_amount, unpaid_amount = 0.0, 0.0
 
     st.markdown("### 💰 สรุปสถานะการเงิน")
     m1, m2, m3 = st.columns(3)
@@ -299,6 +327,7 @@ elif st.session_state.page == "📊 Budget Tracker":
                 styled_expenses,
                 column_config={
                     "Vendor": st.column_config.TextColumn("ร้านค้า", width="medium"),
+                    "Contact": st.column_config.TextColumn("📞 ช่องทางติดต่อ", width="medium"),
                     "Category": None, "Due Date": None,  
                     "Amount": st.column_config.NumberColumn("จำนวนเงิน (บาท)", format="%d", min_value=0, default=0, required=True, width="medium"),
                     "Status": st.column_config.SelectboxColumn("📌 Status", options=["ยังไม่ชำระเงิน", "ชำระเงินแล้ว"], required=True, width="medium")
@@ -308,17 +337,16 @@ elif st.session_state.page == "📊 Budget Tracker":
 
 
 # ==========================================
-# PAGE 2: TO-DO LIST (ไม่มี NAV BAR)
+# PAGE 2: TO-DO LIST 
 # ==========================================
 elif st.session_state.page == "📝 สิ่งที่ต้องทำ (To-Do)":
-    if st.button("⬅️ กลับหน้าหลัก (เมนูเลือกหมวดหมู่)", type="secondary"):
+    if st.button("⬅️ กลับหน้าหลัก", type="secondary"):
         st.session_state.page = "🏠 หน้าแรก"
         st.rerun()
         
     st.title("📝 เตรียมสิ่งที่ต้องทำ (To-Do List)")
     st.markdown("---")
 
-    # ย้ายฟอร์มการเพิ่มงานที่ต้องทำขึ้นมาอยู่ด้านบนของหน้านี้
     st.markdown("### ➕ เพิ่มงานที่ต้องทำใหม่")
     with st.form("add_task_form_main", clear_on_submit=True):
         t_col1, t_col2 = st.columns([2, 1])
@@ -414,25 +442,25 @@ elif st.session_state.page == "📝 สิ่งที่ต้องทำ (To-
 
 
 # ==========================================
-# PAGE 3: GUEST LIST (ระบบจัดการรายชื่อแขก - ไม่มี NAV BAR)
+# PAGE 3: GUEST LIST (มีระบบ RSVP)
 # ==========================================
 elif st.session_state.page == "👥 รายชื่อแขก (Guest List)":
-    if st.button("⬅️ กลับหน้าหลัก (เมนูเลือกหมวดหมู่)", type="secondary"):
+    if st.button("⬅️ กลับหน้าหลัก", type="secondary"):
         st.session_state.page = "🏠 หน้าแรก"
         st.rerun()
         
     st.title("👥 ระบบจัดการและเพิ่มรายชื่อแขก")
-    st.write("บันทึกรายชื่อแขก แยกฝั่งเจ้าสาว/เจ้าบ่าว และส่งข้อมูลไปเก็บที่ Google Sheets")
+    st.write("บันทึกรายชื่อแขก แยกฝั่งเจ้าสาว/เจ้าบ่าว และติดตามสถานะการตอบรับเข้าร่วมงาน")
 
     total_guests = len(st.session_state.guests)
-    bride_guests = len(st.session_state.guests[st.session_state.guests['Side'] == 'ฝั่งเจ้าสาว'])
-    groom_guests = len(st.session_state.guests[st.session_state.guests['Side'] == 'ฝั่งเจ้าบ่าว'])
+    rsvp_confirmed = len(st.session_state.guests[st.session_state.guests['RSVP'] == 'ยืนยันเข้าร่วม'])
+    rsvp_declined = len(st.session_state.guests[st.session_state.guests['RSVP'] == 'ไม่สามารถเข้าร่วมได้'])
 
     st.markdown("### 📊 สรุปจำนวนแขกปัจจุบัน")
     g1, g2, g3 = st.columns(3)
-    g1.metric("จำนวนแขกทั้งหมด", f"{total_guests} คน")
-    g2.metric("👰 แขกฝั่งเจ้าสาว", f"{bride_guests} คน")
-    g3.metric("🤵 แขกฝั่งเจ้าบ่าว", f"{groom_guests} คน")
+    g1.metric("จำนวนแขกในลิสต์ทั้งหมด", f"{total_guests} คน")
+    g2.metric("✅ ยืนยันเข้าร่วมแล้ว", f"{rsvp_confirmed} คน")
+    g3.metric("❌ ไม่สามารถเข้าร่วมได้", f"{rsvp_declined} คน")
 
     st.markdown("---")
 
@@ -446,12 +474,14 @@ elif st.session_state.page == "👥 รายชื่อแขก (Guest List)"
             guest_side = f_col2.selectbox("แขกฝั่งไหน?", ["ฝั่งเจ้าสาว", "ฝั่งเจ้าบ่าว", "แขกส่วนกลาง"])
             guest_group = f_col3.selectbox("กลุ่มบุคคล", ["ญาติผู้ใหญ่", "เพื่อนสนิท", "เพื่อนที่ทำงาน", "เพื่อนสมัยเรียน", "อื่นๆ"])
             
-            guest_note = st.text_input("หมายเหตุเพิ่มเติม (เช่น มา 2 ท่าน, ทานมังสวิรัติ)", placeholder="ระบุโน้ตเพิ่มเติม (ถ้ามี)")
+            f_col4, f_col5 = st.columns([2, 1])
+            guest_note = f_col4.text_input("หมายเหตุเพิ่มเติม (เช่น มา 2 ท่าน, ทานมังสวิรัติ)", placeholder="ระบุโน้ตเพิ่มเติม (ถ้ามี)")
+            guest_rsvp = f_col5.selectbox("สถานะการตอบรับ", ["รอการตอบรับ", "ยืนยันเข้าร่วม", "ไม่สามารถเข้าร่วมได้"])
             
             add_guest_btn = st.form_submit_button("💾 กดบันทึกรายชื่อแขก")
             
             if add_guest_btn and guest_name:
-                new_guest = pd.DataFrame([{'Guest Name': guest_name, 'Side': guest_side, 'Group': guest_group, 'Note': guest_note}])
+                new_guest = pd.DataFrame([{'Guest Name': guest_name, 'Side': guest_side, 'Group': guest_group, 'Note': guest_note, 'RSVP': guest_rsvp}])
                 st.session_state.guests = pd.concat([st.session_state.guests, new_guest], ignore_index=True)
                 save_guests(st.session_state.guests)
                 st.success(f"บันทึกคุณ '{guest_name}' ลงระบบเรียบร้อย!")
@@ -460,13 +490,22 @@ elif st.session_state.page == "👥 รายชื่อแขก (Guest List)"
         st.markdown("---")
         
         if not st.session_state.guests.empty:
-            st.markdown(f"**📋 รายชื่อแขกทั้งหมดในระบบ (กดปุ่มถังขยะเพื่อลบ หรือแตะในตารางเพื่อแก้ไขได้ทันที):**")
+            st.markdown(f"**📋 รายชื่อแขกทั้งหมดในระบบ (แก้ไขข้อมูลหรือสถานะ RSVP ในตารางได้เลย):**")
+            
+            def highlight_rsvp(val):
+                if val == 'ยืนยันเข้าร่วม': return 'background-color: #dcfce7;'
+                elif val == 'ไม่สามารถเข้าร่วมได้': return 'background-color: #fee2e2;'
+                return ''
+                
+            styled_guests = st.session_state.guests.style.map(highlight_rsvp, subset=['RSVP'])
+            
             st.data_editor(
-                st.session_state.guests,
+                styled_guests,
                 column_config={
-                    "Guest Name": st.column_config.TextColumn("📝 ชื่อแขก", required=True, width="large"),
+                    "Guest Name": st.column_config.TextColumn("📝 ชื่อแขก", required=True, width="medium"),
                     "Side": st.column_config.SelectboxColumn("👥 ฝั่ง", options=["ฝั่งเจ้าสาว", "ฝั่งเจ้าบ่าว", "แขกส่วนกลาง"], width="medium"),
-                    "Group": st.column_config.SelectboxColumn("📂 กลุ่ม", options=["ญาติผู้ใหญ่", "เพื่อนสนิท", "เพื่อนที่ทำงาน", "เพื่อนสมัยเรียน", "อื่นๆ"], width="medium"),
+                    "Group": st.column_config.SelectboxColumn("📂 กลุ่ม", options=["ญาติผู้ใหญ่", "เพื่อนสนิท", "เพื่อนที่ทำงาน", "เพื่อนสมัยเรียน", "อื่นๆ"], width="small"),
+                    "RSVP": st.column_config.SelectboxColumn("💌 การตอบรับ", options=["รอการตอบรับ", "ยืนยันเข้าร่วม", "ไม่สามารถเข้าร่วมได้"], width="medium"),
                     "Note": st.column_config.TextColumn("📌 หมายเหตุ", width="medium")
                 },
                 hide_index=False, width='stretch', num_rows="dynamic", key="guest_editor", on_change=on_guests_edit
@@ -479,9 +518,10 @@ elif st.session_state.page == "👥 รายชื่อแขก (Guest List)"
             st.markdown("### 🔍 ค้นหาและดูรายละเอียดแขก")
             search_query = st.text_input("พิมพ์ชื่อแขกเพื่อค้นหา (รองรับทั้งชื่อและนามสกุล):", placeholder="พิมพ์ชื่อตรงนี้...")
             
-            v_col1, v_col2 = st.columns(2)
+            v_col1, v_col2, v_col3 = st.columns(3)
             filter_side = v_col1.selectbox("ตัวกรองฝั่ง:", ["ทั้งหมด", "ฝั่งเจ้าสาว", "ฝั่งเจ้าบ่าว", "แขกส่วนกลาง"])
             filter_group = v_col2.selectbox("ตัวกรองกลุ่ม:", ["ทั้งหมด", "ญาติผู้ใหญ่", "เพื่อนสนิท", "เพื่อนที่ทำงาน", "เพื่อนสมัยเรียน", "อื่นๆ"])
+            filter_rsvp = v_col3.selectbox("สถานะตอบรับ:", ["ทั้งหมด", "รอการตอบรับ", "ยืนยันเข้าร่วม", "ไม่สามารถเข้าร่วมได้"])
             
             display_df = st.session_state.guests.copy()
             if search_query:
@@ -490,6 +530,8 @@ elif st.session_state.page == "👥 รายชื่อแขก (Guest List)"
                 display_df = display_df[display_df['Side'] == filter_side]
             if filter_group != "ทั้งหมด":
                 display_df = display_df[display_df['Group'] == filter_group]
+            if filter_rsvp != "ทั้งหมด":
+                display_df = display_df[display_df['RSVP'] == filter_rsvp]
                 
             st.markdown(f"**💡 ค้นพบแขกทั้งหมด {len(display_df)} ท่านที่ตรงกับเงื่อนไข:**")
             
@@ -497,10 +539,14 @@ elif st.session_state.page == "👥 รายชื่อแขก (Guest List)"
             for _, row in display_df.iterrows():
                 side_icon = "👰" if row['Side'] == "ฝั่งเจ้าสาว" else "🤵" if row['Side'] == "ฝั่งเจ้าบ่าว" else "👥"
                 note_val = row['Note'] if pd.notna(row['Note']) and row['Note'] != "" else "-"
+                rsvp_color = "#10b981" if row['RSVP'] == "ยืนยันเข้าร่วม" else "#ef4444" if row['RSVP'] == "ไม่สามารถเข้าร่วมได้" else "#f59e0b"
                 
                 guest_html += f"""
-                <div style="padding: 12px; margin-bottom: 8px; border-radius: 8px; border-left: 5px solid #ec4899; background-color: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                    <div style="font-weight: 600; font-size: 15px; color: #111827;">{row['Guest Name']}</div>
+                <div style="padding: 12px; margin-bottom: 8px; border-radius: 8px; border-left: 5px solid {rsvp_color}; background-color: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                    <div style="display: flex; justify-content: space-between;">
+                        <div style="font-weight: 600; font-size: 15px; color: #111827;">{row['Guest Name']}</div>
+                        <div style="font-size: 12px; color: {rsvp_color}; font-weight: bold;">{row['RSVP']}</div>
+                    </div>
                     <div style="display: flex; gap: 8px; margin-top: 4px; font-size: 12px;">
                         <span style="background-color: #fce7f3; color: #9d174d; padding: 2px 6px; border-radius: 4px;">{side_icon} {row['Side']}</span>
                         <span style="background-color: #f3f4f6; color: #374151; padding: 2px 6px; border-radius: 4px;">📂 {row['Group']}</span>
