@@ -280,7 +280,18 @@ elif page == "📝 สิ่งที่ต้องทำ (To-Do)":
         if not st.session_state.todos.empty:
             st.markdown(f"**📋 รายการสิ่งที่ต้องทำในตาราง (มีทั้งหมด {len(st.session_state.todos)} รายการ):**")
             def highlight_status(val):
-                return f"background-color: {{'ยังไม่ได้เริ่ม': '#f3f4f6', 'อยู่ระหว่างดำเนินการ': '#fef3c7', 'หยุดไว้ชั่วคราว': '#ffedd5', 'ไม่จำเป็น': '#fee2e2', 'เสร็จแล้ว': '#dcfce7'}.get(val, '')}; color: #1f2937;"
+                colors = {
+                    'ยังไม่ได้เริ่ม': '#f3f4f6', 
+                    'อยู่ระหว่างดำเนินการ': '#fef3c7', 
+                    'หยุดไว้ชั่วคราว': '#ffedd5', 
+                    'ไม่จำเป็น': '#fee2e2', 
+                    'เสร็จแล้ว': '#dcfce7'
+                }
+                bg_color = colors.get(val, '')
+                return f"background-color: {bg_color}; color: #1f2937;"
+                
+            styled_todos = st.session_state.todos.style.map(highlight_status, subset=['Status'])
+
             styled_todos = st.session_state.todos.style.map(highlight_status, subset=['Status'])
             st.data_editor(
                 styled_todos,
